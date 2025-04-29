@@ -137,10 +137,13 @@ func TestCreateDir(t *testing.T) {
 		t.Errorf("创建目录 %s 后, dirExists 返回 false", newDir)
 	}
 
-	// 测试远程路径
+	// 测试远程路径 - 应返回错误
 	remotePath := "user@host:/path/to/dir"
-	if err := createDir(remotePath); err != nil {
-		t.Errorf("createDir(%s) 应该对远程路径无操作: %v", remotePath, err)
+	err = createDir(remotePath)
+	if err == nil {
+		t.Errorf("createDir(%s) 应当返回错误，但得到了nil", remotePath)
+	} else if !strings.Contains(err.Error(), "不支持创建远程目录") {
+		t.Errorf("createDir(%s) 返回了意外的错误: %v", remotePath, err)
 	}
 }
 
@@ -304,14 +307,13 @@ func TestIsDirEmpty(t *testing.T) {
 		t.Errorf("isDirEmpty(%s) 应返回错误，但没有", nonExistentDir)
 	}
 
-	// 测试远程路径
+	// 测试远程路径 - 应返回错误
 	remotePath := "user@host:/path/to/dir"
-	empty, err = isDirEmpty(remotePath)
-	if err != nil {
-		t.Errorf("isDirEmpty(%s) 失败: %v", remotePath, err)
-	}
-	if empty {
-		t.Errorf("isDirEmpty(%s) = true, 期望 false (远程路径应默认为非空)", remotePath)
+	_, err = isDirEmpty(remotePath)
+	if err == nil {
+		t.Errorf("isDirEmpty(%s) 应当返回错误，但得到了nil", remotePath)
+	} else if !strings.Contains(err.Error(), "不支持检查远程目录是否为空") {
+		t.Errorf("isDirEmpty(%s) 返回了意外的错误: %v", remotePath, err)
 	}
 }
 
@@ -401,32 +403,29 @@ func TestCheckDirSameOrNested(t *testing.T) {
 	// 测试远程路径
 	remotePath := "user@host:/path/to/dir"
 	
-	// 本地路径和远程路径
-	same, err = checkDirSameOrNested(sourceDir, remotePath)
-	if err != nil {
-		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, remotePath, err)
-	}
-	if same {
-		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (本地和远程路径应返回false)", sourceDir, remotePath)
-	}
-	
-	// 远程路径和本地路径
-	same, err = checkDirSameOrNested(remotePath, sourceDir)
-	if err != nil {
-		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", remotePath, sourceDir, err)
-	}
-	if same {
-		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (远程和本地路径应返回false)", remotePath, sourceDir)
+	// 本地路径和远程路径 - 应返回错误
+	_, err = checkDirSameOrNested(sourceDir, remotePath)
+	if err == nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 应当返回错误，但得到了nil", sourceDir, remotePath)
+	} else if !strings.Contains(err.Error(), "不支持远程目标目录路径") {
+		t.Errorf("checkDirSameOrNested(%s, %s) 返回了意外的错误: %v", sourceDir, remotePath, err)
 	}
 	
-	// 两个远程路径
+	// 远程路径和本地路径 - 应返回错误
+	_, err = checkDirSameOrNested(remotePath, sourceDir)
+	if err == nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 应当返回错误，但得到了nil", remotePath, sourceDir)
+	} else if !strings.Contains(err.Error(), "不支持远程源目录路径") {
+		t.Errorf("checkDirSameOrNested(%s, %s) 返回了意外的错误: %v", remotePath, sourceDir, err)
+	}
+	
+	// 两个远程路径 - 应返回错误
 	remotePath2 := "user@host:/path/to/other"
-	same, err = checkDirSameOrNested(remotePath, remotePath2)
-	if err != nil {
-		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", remotePath, remotePath2, err)
-	}
-	if same {
-		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (两个不同远程路径应返回false)", remotePath, remotePath2)
+	_, err = checkDirSameOrNested(remotePath, remotePath2)
+	if err == nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 应当返回错误，但得到了nil", remotePath, remotePath2)
+	} else if !strings.Contains(err.Error(), "不支持远程源目录路径") {
+		t.Errorf("checkDirSameOrNested(%s, %s) 返回了意外的错误: %v", remotePath, remotePath2, err)
 	}
 }
 
