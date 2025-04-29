@@ -61,11 +61,6 @@ func TestDryRunExecution(t *testing.T) {
 		t.Fatalf("无法复制包含规则文件: %v", err)
 	}
 	
-	// 设置模拟EDITOR环境变量
-	originalEditor := os.Getenv("EDITOR")
-	os.Setenv("EDITOR", "echo") // 使用echo替代真实编辑器
-	defer os.Setenv("EDITOR", originalEditor)
-	
 	// 调用dry-run模式执行逻辑
 	args := []string{"-aH", "--force", "--delete-during", 
 		"--exclude-from=" + filepath.Join(bashrcDir, "mirror_exclude"),
