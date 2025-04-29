@@ -137,13 +137,10 @@ func TestMainDryRun(t *testing.T) {
 	defer func() { os.Args = oldArgs }()
 	os.Args = []string{"folder_mirror", "--dry-run", srcDir, dstDir}
 	
-	// 保存并修改EDITOR环境变量，防止测试被vim阻塞
-	origEditor := os.Getenv("EDITOR")
+	// 保存并设置测试环境标志
 	origTesting := os.Getenv("TESTING")
-	os.Setenv("EDITOR", "cat") // 用cat替代vim，不会阻塞
 	os.Setenv("TESTING", "1") // 设置测试环境标志
 	defer func() {
-		os.Setenv("EDITOR", origEditor)
 		os.Setenv("TESTING", origTesting)
 	}()
 
@@ -241,13 +238,10 @@ func TestMainBasicExecution(t *testing.T) {
 	defer func() { os.Args = oldArgs }()
 	os.Args = []string{"folder_mirror", srcDir, dstDir}
 	
-	// 保存并修改EDITOR环境变量，防止测试被vim阻塞
-	origEditor := os.Getenv("EDITOR")
+	// 保存并设置测试环境标志
 	origTesting := os.Getenv("TESTING")
-	os.Setenv("EDITOR", "cat") // 用cat替代vim，不会阻塞
 	os.Setenv("TESTING", "1") // 设置测试环境标志
 	defer func() {
-		os.Setenv("EDITOR", origEditor)
 		os.Setenv("TESTING", origTesting)
 	}()
 
