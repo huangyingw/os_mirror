@@ -388,4 +388,268 @@ func TestEmptySourceDir(t *testing.T) {
 	if !found {
 		t.Errorf("对于空的源目录，应显示警告消息，但未找到")
 	}
+}
+
+// 测试远程源目录路径
+func TestRemoteSourceDir(t *testing.T) {
+	// 创建本地测试目录
+	targetDir, err := ioutil.TempDir("", "target_dir_remote_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(targetDir)
+
+	// 使用远程源路径
+	sourceDir := "user@host:/remote/source"
+
+	// 捕获输出
+	var capturedOutput []string
+	oldHook := printHook
+	printHook = func(message string) {
+		capturedOutput = append(capturedOutput, message)
+	}
+	defer func() {
+		printHook = oldHook
+	}()
+
+	// 临时修改os.Exit函数
+	oldOsExit := osExit
+	exitCode := 0
+	osExit = func(code int) {
+		exitCode = code
+		// 不实际退出，只记录退出码
+	}
+	defer func() {
+		osExit = oldOsExit
+	}()
+
+	// 确保路径末尾有斜杠
+	source := sourceDir
+	target := targetDir
+	if !strings.HasSuffix(source, "/") {
+		source += "/"
+	}
+	if !strings.HasSuffix(target, "/") {
+		target += "/"
+	}
+
+	printColored(colorGreen, "源目录: "+source)
+	printColored(colorGreen, "目标目录: "+target)
+
+	// 先检查源目录是否为空 - 应该报错
+	_, err = isDirEmpty(source)
+	if err == nil {
+		t.Errorf("isDirEmpty应该报错，但没有")
+	} else {
+		// 错误路径检查
+		printColored(colorRed, "错误: 无法检查源目录是否为空: "+err.Error())
+		osExit(1)
+	}
+
+	// 验证结果
+	if exitCode != 1 {
+		t.Errorf("对于远程源目录，期望退出码为1，但得到 %d", exitCode)
+	}
+
+	found := false
+	for _, msg := range capturedOutput {
+		if strings.Contains(msg, "不支持检查远程目录是否为空") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("对于远程源目录，应显示适当的错误消息，但未找到")
+	}
+}
+
+// 测试远程目标目录路径
+func TestRemoteTargetDir(t *testing.T) {
+	// 创建本地测试目录
+	sourceDir, err := ioutil.TempDir("", "source_dir_remote_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(sourceDir)
+
+	// 在源目录中创建一个文件，使其不为空
+	testFile := filepath.Join(sourceDir, "test_file")
+	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("无法创建测试文件: %v", err)
+	}
+
+	// 使用远程目标路径
+	targetDir := "user@host:/remote/target"
+
+	// 捕获输出
+	var capturedOutput []string
+	oldHook := printHook
+	printHook = func(message string) {
+		capturedOutput = append(capturedOutput, message)
+	}
+	defer func() {
+		printHook = oldHook
+	}()
+
+	// 临时修改os.Exit函数
+	oldOsExit := osExit
+	exitCode := 0
+	osExit = func(code int) {
+		exitCode = code
+		// 不实际退出，只记录退出码
+	}
+	defer func() {
+		osExit = oldOsExit
+	}()
+
+	// 确保路径末尾有斜杠
+	source := sourceDir
+	target := targetDir
+	if !strings.HasSuffix(source, "/") {
+		source += "/"
+	}
+	if !strings.HasSuffix(target, "/") {
+		target += "/"
+	}
+
+	printColored(colorGreen, "源目录: "+source)
+	printColored(colorGreen, "目标目录: "+target)
+
+	// 检查源目录是否为空
+	isEmpty, err := isDirEmpty(source)
+	if err != nil {
+		printColored(colorRed, "错误: 无法检查源目录是否为空: "+err.Error())
+		osExit(1)
+	}
+	if isEmpty {
+		printColored(colorRed, "错误: 源目录为空，不执行镜像操作")
+		osExit(1)
+	}
+
+	// 检查目录关系，应该在这里报错
+	_, err = checkDirSameOrNested(source, target)
+	if err == nil {
+		t.Errorf("checkDirSameOrNested应该报错，但没有")
+	} else {
+		// 错误路径检查
+		printColored(colorRed, "错误: "+err.Error())
+		osExit(1)
+	}
+
+	// 验证结果
+	if exitCode != 1 {
+		t.Errorf("对于远程目标目录，期望退出码为1，但得到 %d", exitCode)
+	}
+
+	found := false
+	for _, msg := range capturedOutput {
+		if strings.Contains(msg, "不支持远程目标目录路径") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("对于远程目标目录，应显示适当的错误消息，但未找到")
+	}
+}
+
+// 测试创建目标目录失败
+func TestCreateTargetDirFailure(t *testing.T) {
+	// 创建本地测试目录
+	sourceDir, err := ioutil.TempDir("", "source_dir_create_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(sourceDir)
+
+	// 在源目录中创建一个文件，使其不为空
+	testFile := filepath.Join(sourceDir, "test_file")
+	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("无法创建测试文件: %v", err)
+	}
+
+	// 使用一个不存在且无法创建的目标目录
+	// 在类Unix系统上，/proc是一个特殊的文件系统，通常不允许创建新目录
+	targetDir := "/proc/impossible_dir"
+	if os.Getuid() == 0 {
+		// root用户可能在/proc创建目录，所以使用另一个通常无权限的目录
+		targetDir = "/sys/impossible_dir"
+	}
+
+	// 捕获输出
+	var capturedOutput []string
+	oldHook := printHook
+	printHook = func(message string) {
+		capturedOutput = append(capturedOutput, message)
+	}
+	defer func() {
+		printHook = oldHook
+	}()
+
+	// 临时修改os.Exit函数
+	oldOsExit := osExit
+	exitCode := 0
+	osExit = func(code int) {
+		exitCode = code
+		// 不实际退出，只记录退出码
+	}
+	defer func() {
+		osExit = oldOsExit
+	}()
+
+	// 确保路径末尾有斜杠
+	source := sourceDir
+	target := targetDir
+	if !strings.HasSuffix(source, "/") {
+		source += "/"
+	}
+	if !strings.HasSuffix(target, "/") {
+		target += "/"
+	}
+
+	printColored(colorGreen, "源目录: "+source)
+	printColored(colorGreen, "目标目录: "+target)
+
+	// 检查源目录是否为空
+	isEmpty, err := isDirEmpty(source)
+	if err != nil {
+		printColored(colorRed, "错误: 无法检查源目录是否为空: "+err.Error())
+		osExit(1)
+	}
+	if isEmpty {
+		printColored(colorRed, "错误: 源目录为空，不执行镜像操作")
+		osExit(1)
+	}
+
+	// 检查源目录和目标目录是否相同或嵌套
+	_, err = checkDirSameOrNested(source, target)
+	if err != nil {
+		printColored(colorRed, "错误: "+err.Error())
+		osExit(1)
+	}
+
+	// 检查目标目录是否存在，不存在则创建
+	if !dirExists(target) {
+		printColored(colorYellow, "目标目录不存在，尝试创建...")
+		if err := createDir(target); err != nil {
+			printColored(colorRed, "创建目标目录失败: "+err.Error())
+			osExit(1)
+		}
+	}
+
+	// 验证结果
+	if exitCode != 1 {
+		t.Errorf("对于创建目标目录失败，期望退出码为1，但得到 %d", exitCode)
+	}
+
+	found := false
+	for _, msg := range capturedOutput {
+		if strings.Contains(msg, "创建目标目录失败") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("对于创建目标目录失败，应显示适当的错误消息，但未找到")
+	}
 } 
