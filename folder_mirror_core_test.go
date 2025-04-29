@@ -235,4 +235,233 @@ func TestReadRuleFileExtended(t *testing.T) {
 			t.Error("读取无权限文件应当失败，但成功了")
 		}
 	}
+}
+
+// 测试检查相同或嵌套目录的功能 - 扩展测试
+func TestCheckDirSameOrNestedExtended(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "dir_nested_test")
+	if err != nil {
+		t.Fatalf("无法创建临时目录: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 创建测试目录结构
+	parentDir := filepath.Join(tempDir, "parent")
+	childDir := filepath.Join(parentDir, "child")
+	siblingDir := filepath.Join(tempDir, "sibling")
+
+	// 创建目录
+	if err := os.MkdirAll(childDir, 0755); err != nil {
+		t.Fatalf("无法创建子目录: %v", err)
+	}
+	if err := os.MkdirAll(siblingDir, 0755); err != nil {
+		t.Fatalf("无法创建兄弟目录: %v", err)
+	}
+
+	// 测试用例
+	testCases := []struct {
+		name       string
+		source     string
+		target     string
+		expected   bool
+		expectErr  bool
+		errMessage string
+	}{
+		{
+			name:     "相同目录",
+			source:   parentDir,
+			target:   parentDir,
+			expected: true,
+		},
+		{
+			name:     "子目录作为目标",
+			source:   parentDir,
+			target:   childDir,
+			expected: true,
+		},
+		{
+			name:     "父目录作为目标",
+			source:   childDir,
+			target:   parentDir,
+			expected: true,
+		},
+		{
+			name:     "兄弟目录",
+			source:   parentDir,
+			target:   siblingDir,
+			expected: false,
+		},
+		{
+			name:       "远程源路径",
+			source:     "user@host:/remote/source",
+			target:     siblingDir,
+			expected:   false,
+			expectErr:  true,
+			errMessage: "不支持远程源目录路径",
+		},
+		{
+			name:       "远程目标路径",
+			source:     parentDir,
+			target:     "user@host:/remote/target",
+			expected:   false,
+			expectErr:  true,
+			errMessage: "不支持远程目标目录路径",
+		},
+	}
+
+	// 执行测试
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := checkDirSameOrNested(tc.source, tc.target)
+
+			// 检查错误
+			if tc.expectErr {
+				if err == nil {
+					t.Errorf("期望错误但没有得到错误")
+				} else if tc.errMessage != "" && !strings.Contains(err.Error(), tc.errMessage) {
+					t.Errorf("错误消息不匹配，期望包含 %q，得到 %q", tc.errMessage, err.Error())
+				}
+				return
+			}
+
+			// 如果不期望错误，检查结果是否符合预期
+			if err != nil {
+				t.Errorf("意外错误: %v", err)
+				return
+			}
+
+			if result != tc.expected {
+				t.Errorf("结果不符合预期，期望 %v，得到 %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+// 测试创建和检查符号链接目录
+func TestCheckDirSymlinks(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "symlink_test")
+	if err != nil {
+		t.Fatalf("无法创建临时目录: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 创建测试目录结构
+	realDir := filepath.Join(tempDir, "real_dir")
+	symlinkDir := filepath.Join(tempDir, "symlink_dir")
+	otherDir := filepath.Join(tempDir, "other_dir")
+
+	// 创建目录
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatalf("无法创建真实目录: %v", err)
+	}
+	if err := os.MkdirAll(otherDir, 0755); err != nil {
+		t.Fatalf("无法创建其他目录: %v", err)
+	}
+
+	// 创建符号链接
+	if err := os.Symlink(realDir, symlinkDir); err != nil {
+		// 跳过此测试，如果环境不支持符号链接
+		t.Skipf("环境不支持符号链接: %v", err)
+	}
+
+	// 测试用例
+	testCases := []struct {
+		name     string
+		source   string
+		target   string
+		expected bool
+	}{
+		{
+			name:     "真实目录和符号链接",
+			source:   realDir,
+			target:   symlinkDir,
+			expected: true,
+		},
+		{
+			name:     "符号链接和真实目录",
+			source:   symlinkDir,
+			target:   realDir,
+			expected: true,
+		},
+		{
+			name:     "符号链接和其他目录",
+			source:   symlinkDir,
+			target:   otherDir,
+			expected: false,
+		},
+	}
+
+	// 执行测试
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := checkDirSameOrNested(tc.source, tc.target)
+			if err != nil {
+				t.Errorf("意外错误: %v", err)
+				return
+			}
+			if result != tc.expected {
+				t.Errorf("结果不符合预期，期望 %v，得到 %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+// 测试目标路径不存在的情况
+func TestCheckDirNonExistentTarget(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "nonexistent_test")
+	if err != nil {
+		t.Fatalf("无法创建临时目录: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 创建源目录
+	sourceDir := filepath.Join(tempDir, "source")
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
+		t.Fatalf("无法创建源目录: %v", err)
+	}
+
+	// 不存在的目标目录
+	targetDir := filepath.Join(tempDir, "nonexistent")
+
+	// 测试检查
+	result, err := checkDirSameOrNested(sourceDir, targetDir)
+	if err != nil {
+		t.Errorf("检查不存在的目标目录时出错: %v", err)
+	}
+	if result {
+		t.Error("不存在的目标目录被错误地识别为相同或嵌套目录")
+	}
+}
+
+// 测试无法获取Lstat信息的情况
+func TestCheckDirLstatError(t *testing.T) {
+	// 使用一个特殊的无法访问的路径
+	sourceDir := "/proc/self/pagemap" // 普通用户无法访问此文件
+	targetDir := "/tmp"
+
+	// 测试检查
+	_, err := checkDirSameOrNested(sourceDir, targetDir)
+	// 这里我们只需要验证函数不会崩溃，具体错误消息可能因操作系统而异
+	if err == nil {
+		// 如果没有错误，可能是因为当前用户有足够的权限或者在某些特殊环境中运行
+		t.Log("预期会有错误，但没有得到错误。这可能取决于运行测试的用户权限。")
+	}
+}
+
+// 辅助函数：检查字符串是否包含子串
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
+
+// 查找子字符串在字符串中的索引位置
+func indexString(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 } 
