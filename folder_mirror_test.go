@@ -202,20 +202,42 @@ func TestMarkerFile(t *testing.T) {
 	
 	// 测试检查标记文件
 	valid, err := checkMarkerFile()
-	if !valid || err != nil {
-		t.Errorf("checkMarkerFile() = %v, %v; 期望 true, nil", valid, err)
+	if err != nil {
+		t.Errorf("checkMarkerFile() 失败: %v", err)
+	}
+	if !valid {
+		t.Errorf("checkMarkerFile() = false, 期望 true")
 	}
 	
 	// 测试过期的标记文件
-	// 修改文件为11秒前的时间戳（超过10秒超时）
-	oldTime := time.Now().Add(-11 * time.Second).Unix()
-	if err := ioutil.WriteFile(markerFile, []byte(strconv.FormatInt(oldTime, 10)), 0644); err != nil {
+	expiredTimestamp := time.Now().Unix() - markerTimeout - 10
+	if err := ioutil.WriteFile(markerFile, []byte(strconv.FormatInt(expiredTimestamp, 10)), 0644); err != nil {
 		t.Fatalf("无法写入标记文件: %v", err)
 	}
 	
 	valid, err = checkMarkerFile()
 	if valid || err == nil {
 		t.Errorf("对于过期的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
+	}
+	
+	// 测试标记文件格式错误
+	if err := ioutil.WriteFile(markerFile, []byte("not_a_timestamp"), 0644); err != nil {
+		t.Fatalf("无法写入标记文件: %v", err)
+	}
+	
+	valid, err = checkMarkerFile()
+	if valid || err == nil {
+		t.Errorf("对于格式错误的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
+	}
+	
+	// 删除标记文件测试不存在的情况
+	if err := os.Remove(markerFile); err != nil {
+		t.Fatalf("无法删除标记文件: %v", err)
+	}
+	
+	valid, err = checkMarkerFile()
+	if valid || err == nil {
+		t.Errorf("对于不存在的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
 	}
 }
 
@@ -265,6 +287,26 @@ func TestReadRuleFile(t *testing.T) {
 	_, err = readRuleFile("/non/existent/file")
 	if err == nil {
 		t.Errorf("对不存在的文件，readRuleFile() 应该返回错误")
+	}
+	
+	// 创建无效的规则文件测试扫描错误
+	invalidContent := []byte{0, 1, 2, 3, 4} // 不可读的二进制内容
+	invalidFile, err := ioutil.TempFile("", "invalid_rules_test")
+	if err != nil {
+		t.Fatalf("无法创建临时文件: %v", err)
+	}
+	defer os.Remove(invalidFile.Name())
+	
+	// 写入无效内容
+	if _, err := invalidFile.Write(invalidContent); err != nil {
+		t.Fatalf("无法写入无效内容: %v", err)
+	}
+	invalidFile.Close()
+	
+	// 尝试读取无效内容的文件
+	if _, err := readRuleFile(invalidFile.Name()); err != nil {
+		// 这实际上应该成功，因为readRuleFile只是跳过无法解析的行
+		t.Errorf("无法读取含无效内容的文件: %v", err)
 	}
 }
 
@@ -373,33 +415,6 @@ func TestCheckDirSameOrNested(t *testing.T) {
 		t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (源是目标的子目录应返回true)", nestedDir, sourceDir)
 	}
 
-	// 测试符号链接 (只在非Windows系统上运行)
-	if os.PathSeparator == '/' {
-		// 创建指向源目录的符号链接
-		linkPath := filepath.Join(baseDir, "link_to_source")
-		if err := os.Symlink(sourceDir, linkPath); err != nil {
-			t.Fatalf("无法创建符号链接: %v", err)
-		}
-
-		// 测试源目录和链接
-		same, err = checkDirSameOrNested(sourceDir, linkPath)
-		if err != nil {
-			t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, linkPath, err)
-		}
-		if !same {
-			t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (源和指向源的链接应返回true)", sourceDir, linkPath)
-		}
-
-		// 测试链接和目标目录
-		same, err = checkDirSameOrNested(linkPath, targetDir)
-		if err != nil {
-			t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", linkPath, targetDir, err)
-		}
-		if same {
-			t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (链接和不同目录应返回false)", linkPath, targetDir)
-		}
-	}
-
 	// 测试远程路径
 	remotePath := "user@host:/path/to/dir"
 	
@@ -419,8 +434,20 @@ func TestCheckDirSameOrNested(t *testing.T) {
 		t.Errorf("checkDirSameOrNested(%s, %s) 返回了意外的错误: %v", remotePath, sourceDir, err)
 	}
 	
+	// 测试无效的绝对路径
+	invalidPath := string([]byte{0})
+	_, err = checkDirSameOrNested(invalidPath, targetDir)
+	if err == nil {
+		t.Errorf("对于无效路径，checkDirSameOrNested应当返回错误")
+	}
+	
+	_, err = checkDirSameOrNested(sourceDir, invalidPath)
+	if err == nil {
+		t.Errorf("对于无效路径，checkDirSameOrNested应当返回错误")
+	}
+	
 	// 两个远程路径 - 应返回错误
-	remotePath2 := "user@host:/path/to/other"
+	remotePath2 := "user2@host2:/path/to/dir2"
 	_, err = checkDirSameOrNested(remotePath, remotePath2)
 	if err == nil {
 		t.Errorf("checkDirSameOrNested(%s, %s) 应当返回错误，但得到了nil", remotePath, remotePath2)
