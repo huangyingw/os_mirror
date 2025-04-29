@@ -10,8 +10,39 @@
 - 支持通过配置文件定义包含和排除规则
 - 支持本地和远程路径
 - 彩色输出，提供更好的用户体验
+- 防止相同或嵌套目录之间的操作，避免潜在的文件损失
+- 防止空源目录的镜像，避免清空目标目录
+- 防止对远程路径执行危险操作
 
-## 安装
+## 构建和安装
+
+### 使用 Makefile 构建
+
+推荐使用提供的 Makefile 进行构建和安装：
+
+```bash
+# 构建应用程序
+make build
+
+# 运行测试
+make test
+
+# 生成测试覆盖率报告
+make coverage
+
+# 安装到系统目录
+sudo make install
+
+# 清理构建文件
+make clean
+
+# 查看所有可用命令
+make help
+```
+
+### 手动构建
+
+如果不使用 Makefile，也可以手动构建：
 
 ```bash
 go build -o folder_mirror folder_mirror.go
@@ -30,6 +61,14 @@ folder_mirror [--dry-run] SOURCE_DIR TARGET_DIR
   SOURCE_DIR         源目录路径
   TARGET_DIR         目标目录路径
 ```
+
+## 安全特性
+
+该工具包含多项安全检查，以防止意外的数据丢失：
+
+1. 防止在相同或嵌套目录之间执行镜像操作
+2. 防止从空源目录镜像（这可能会清空目标目录）
+3. 对远程路径执行额外的安全检查
 
 ## 工作流程
 
@@ -74,8 +113,27 @@ folder_mirror --dry-run /home/user/source/ /backup/target/
 folder_mirror /home/user/source/ /backup/target/
 ```
 
-## 运行测试
+## 开发和测试
+
+### 运行测试
 
 ```bash
-go test -v
-``` 
+# 运行所有测试
+make test
+
+# 生成测试覆盖率报告
+make coverage
+```
+
+测试覆盖率报告将生成在 `coverage.html` 文件中，可以在浏览器中查看详细的覆盖情况。
+
+### 代码结构
+
+- `folder_mirror.go` - 主程序代码
+- `folder_mirror_test.go` - 测试文件
+- `folder_mirror_test_utils.go` - 测试辅助函数
+
+## 依赖项
+
+- Go 1.16 或更高版本
+- 系统中已安装 rsync 
