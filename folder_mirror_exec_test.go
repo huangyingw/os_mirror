@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -236,5 +237,155 @@ func TestExecutionFailure(t *testing.T) {
 	_, err = cmd.CombinedOutput()
 	if err == nil {
 		t.Errorf("模拟rsync命令预期失败，但却成功了")
+	}
+}
+
+// 测试源目录和目标目录相同的情况
+func TestSameSourceAndTarget(t *testing.T) {
+	// 创建测试目录结构
+	baseDir, err := ioutil.TempDir("", "same_dir_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(baseDir)
+
+	// 创建测试文件
+	testFile := filepath.Join(baseDir, "test_file")
+	if err := ioutil.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("无法创建测试文件: %v", err)
+	}
+
+	// 捕获输出
+	var capturedOutput []string
+	oldHook := printHook
+	printHook = func(message string) {
+		capturedOutput = append(capturedOutput, message)
+	}
+	defer func() {
+		printHook = oldHook
+	}()
+
+	// 临时修改os.Exit函数
+	oldOsExit := osExit
+	exitCode := 0
+	osExit = func(code int) {
+		exitCode = code
+		// 不实际退出，只记录退出码
+	}
+	defer func() {
+		osExit = oldOsExit
+	}()
+
+	// 测试相同目录
+	source := baseDir
+	target := baseDir
+
+	if !strings.HasSuffix(source, "/") {
+		source += "/"
+	}
+	if !strings.HasSuffix(target, "/") {
+		target += "/"
+	}
+
+	printColored(colorGreen, "源目录: "+source)
+	printColored(colorGreen, "目标目录: "+target)
+
+	// 执行检查
+	isSameOrNested, _ := checkDirSameOrNested(source, target)
+	if isSameOrNested {
+		printColored(colorRed, "错误: 源目录和目标目录相同或互为子目录，操作危险，终止执行")
+		osExit(1)
+	}
+
+	// 验证结果
+	if exitCode != 1 {
+		t.Errorf("对于相同的源目录和目标目录，期望退出码为1，但得到 %d", exitCode)
+	}
+
+	found := false
+	for _, msg := range capturedOutput {
+		if strings.Contains(msg, "源目录和目标目录相同或互为子目录") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("对于相同的源目录和目标目录，应显示警告消息，但未找到")
+	}
+}
+
+// 测试源目录为空的情况
+func TestEmptySourceDir(t *testing.T) {
+	// 创建测试目录结构
+	sourceDir, err := ioutil.TempDir("", "empty_source_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(sourceDir)
+
+	targetDir, err := ioutil.TempDir("", "target_dir_test")
+	if err != nil {
+		t.Fatalf("无法创建测试目录: %v", err)
+	}
+	defer os.RemoveAll(targetDir)
+
+	// 确保源目录为空(默认就是空的)
+
+	// 捕获输出
+	var capturedOutput []string
+	oldHook := printHook
+	printHook = func(message string) {
+		capturedOutput = append(capturedOutput, message)
+	}
+	defer func() {
+		printHook = oldHook
+	}()
+
+	// 临时修改os.Exit函数
+	oldOsExit := osExit
+	exitCode := 0
+	osExit = func(code int) {
+		exitCode = code
+		// 不实际退出，只记录退出码
+	}
+	defer func() {
+		osExit = oldOsExit
+	}()
+
+	// 测试空源目录
+	source := sourceDir
+	target := targetDir
+
+	if !strings.HasSuffix(source, "/") {
+		source += "/"
+	}
+	if !strings.HasSuffix(target, "/") {
+		target += "/"
+	}
+
+	printColored(colorGreen, "源目录: "+source)
+	printColored(colorGreen, "目标目录: "+target)
+
+	// 执行检查
+	isEmpty, _ := isDirEmpty(source)
+	if isEmpty {
+		printColored(colorRed, "错误: 源目录为空，不执行镜像操作")
+		osExit(1)
+	}
+
+	// 验证结果
+	if exitCode != 1 {
+		t.Errorf("对于空的源目录，期望退出码为1，但得到 %d", exitCode)
+	}
+
+	found := false
+	for _, msg := range capturedOutput {
+		if strings.Contains(msg, "源目录为空") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("对于空的源目录，应显示警告消息，但未找到")
 	}
 } 
