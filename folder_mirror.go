@@ -376,22 +376,8 @@ func main() {
 		}
 		
 		printColored(colorGreen, "预览完成。标记文件已创建: "+markerFile)
-		
-		// 在编辑器中打开结果文件
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "vim"
-		}
-		
-		cmd = exec.Command(editor, tmpFile.Name())
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		
-		if err := cmd.Run(); err != nil {
-			printColored(colorRed, "打开编辑器失败: "+err.Error())
-			osExit(1)
-		}
+		printColored(colorGreen, "结果已保存到文件: "+tmpFile.Name())
+		// 不再自动打开编辑器查看文件，用户可以手动查看结果文件
 	} else {
 		// 检查标记文件
 		valid, err := checkMarkerFile()
