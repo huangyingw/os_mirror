@@ -19,6 +19,9 @@ var (
 	markerTimeout = int64(3600) // 1小时（秒）
 )
 
+// osExit 封装了os.Exit函数，便于测试
+var osExit = os.Exit
+
 // 定义颜色常量
 const (
 	colorRed    = "\033[0;31m"
@@ -68,8 +71,9 @@ func readRuleFile(filePath string) ([]string, error) {
 
 // 检查目录是否存在
 func dirExists(path string) bool {
-	// 跳过远程路径检查 (包含冒号的路径)
+	// 远程路径检查 (包含冒号的路径)
 	if strings.Contains(path, ":") {
+		// 如果是远程路径，我们无法直接检查，默认存在
 		return true
 	}
 
@@ -82,9 +86,9 @@ func dirExists(path string) bool {
 
 // 创建目录
 func createDir(path string) error {
-	// 跳过远程路径 (包含冒号的路径)
+	// 远程路径检查 (包含冒号的路径)
 	if strings.Contains(path, ":") {
-		return nil
+		return fmt.Errorf("不支持创建远程目录，请使用本地文件系统路径: %s", path)
 	}
 
 	return os.MkdirAll(path, 0755)
@@ -122,6 +126,114 @@ func createMarkerFile() error {
 	return ioutil.WriteFile(markerFile, []byte(timestamp), 0644)
 }
 
+// 检查源目录和目标目录是否相同或有从属关系
+func checkDirSameOrNested(source, target string) (bool, error) {
+	// 检查远程路径 (包含冒号的路径)
+	if strings.Contains(source, ":") {
+		return false, fmt.Errorf("不支持远程源目录路径，请使用本地文件系统路径: %s", source)
+	}
+	if strings.Contains(target, ":") {
+		return false, fmt.Errorf("不支持远程目标目录路径，请使用本地文件系统路径: %s", target)
+	}
+
+	// 获取源目录和目标目录的绝对路径
+	absSource, err := filepath.Abs(source)
+	if err != nil {
+		return false, fmt.Errorf("无法获取源目录绝对路径: %v", err)
+	}
+
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return false, fmt.Errorf("无法获取目标目录绝对路径: %v", err)
+	}
+
+	// 检查目录是否相同
+	if absSource == absTarget {
+		return true, nil
+	}
+
+	// 检查目标目录是否是源目录的子目录
+	if strings.HasPrefix(absTarget, absSource+string(filepath.Separator)) {
+		return true, nil
+	}
+
+	// 检查源目录是否是目标目录的子目录
+	if strings.HasPrefix(absSource, absTarget+string(filepath.Separator)) {
+		return true, nil
+	}
+
+	// 检查源目录和目标目录是否通过符号链接指向相同位置
+	srcInfo, err := os.Lstat(absSource)
+	if err != nil {
+		return false, fmt.Errorf("无法获取源目录信息: %v", err)
+	}
+
+	tgtInfo, err := os.Lstat(absTarget)
+	if err != nil {
+		// 目标目录可能不存在，此时不是同一目录
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("无法获取目标目录信息: %v", err)
+	}
+
+	// 如果两者都是符号链接，解析它们的真实路径并比较
+	if srcInfo.Mode()&os.ModeSymlink != 0 || tgtInfo.Mode()&os.ModeSymlink != 0 {
+		realSource, err := filepath.EvalSymlinks(absSource)
+		if err != nil {
+			return false, fmt.Errorf("无法解析源目录符号链接: %v", err)
+		}
+
+		realTarget, err := filepath.EvalSymlinks(absTarget)
+		if err != nil {
+			return false, fmt.Errorf("无法解析目标目录符号链接: %v", err)
+		}
+
+		// 比较解析后的路径
+		if realSource == realTarget {
+			return true, nil
+		}
+
+		// 检查解析后的路径是否有嵌套关系
+		if strings.HasPrefix(realTarget, realSource+string(filepath.Separator)) {
+			return true, nil
+		}
+
+		if strings.HasPrefix(realSource, realTarget+string(filepath.Separator)) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// 检查目录是否为空
+func isDirEmpty(dir string) (bool, error) {
+	// 远程路径检查 (包含冒号的路径)
+	if strings.Contains(dir, ":") {
+		return false, fmt.Errorf("不支持检查远程目录是否为空，请使用本地文件系统路径: %s", dir)
+	}
+
+	f, err := os.Open(dir)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	// 读取目录中的第一个条目
+	_, err = f.Readdirnames(1)
+	if err == nil {
+		// 找到至少一个条目，目录不为空
+		return false, nil
+	}
+	if err != nil && err.Error() == "EOF" {
+		// 没有找到条目，目录为空
+		return true, nil
+	}
+	// 其他错误
+	return false, err
+}
+
 func main() {
 	// 解析命令行参数
 	dryRun := flag.Bool("dry-run", false, "测试镜像操作，不实际复制文件")
@@ -137,7 +249,7 @@ func main() {
 		fmt.Println("参数:")
 		fmt.Println("  SOURCE_DIR         源目录路径")
 		fmt.Println("  TARGET_DIR         目标目录路径")
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// 获取源目录和目标目录
@@ -158,7 +270,29 @@ func main() {
 	// 检查源目录是否存在
 	if !dirExists(source) {
 		printColored(colorRed, "错误: 源目录不存在: "+source)
-		os.Exit(1)
+		osExit(1)
+	}
+
+	// 检查源目录是否为空
+	isEmpty, err := isDirEmpty(source)
+	if err != nil {
+		printColored(colorRed, "错误: 无法检查源目录是否为空: "+err.Error())
+		osExit(1)
+	}
+	if isEmpty {
+		printColored(colorRed, "错误: 源目录为空，不执行镜像操作")
+		osExit(1)
+	}
+
+	// 检查源目录和目标目录是否相同或嵌套或为远程路径
+	isSameOrNested, err := checkDirSameOrNested(source, target)
+	if err != nil {
+		printColored(colorRed, "错误: "+err.Error())
+		osExit(1)
+	}
+	if isSameOrNested {
+		printColored(colorRed, "错误: 源目录和目标目录相同或互为子目录，操作危险，终止执行")
+		osExit(1)
 	}
 
 	// 检查目标目录是否存在，不存在则创建
@@ -166,7 +300,7 @@ func main() {
 		printColored(colorYellow, "目标目录不存在，尝试创建...")
 		if err := createDir(target); err != nil {
 			printColored(colorRed, "创建目标目录失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 	}
 
@@ -174,7 +308,7 @@ func main() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		printColored(colorRed, "无法获取用户主目录: "+err.Error())
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// 读取排除和包含的文件列表
@@ -184,7 +318,7 @@ func main() {
 	// 验证排除规则文件是否存在
 	if _, err := os.Stat(excludeListPath); os.IsNotExist(err) {
 		printColored(colorRed, "错误: 排除规则文件不存在: "+excludeListPath)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// 构建rsync命令参数
@@ -212,7 +346,7 @@ func main() {
 		tmpFile, err := ioutil.TempFile("", "folder_mirror_*.log")
 		if err != nil {
 			printColored(colorRed, "创建临时文件失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 		defer tmpFile.Close()
 		
@@ -226,19 +360,19 @@ func main() {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			printColored(colorRed, "执行rsync失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 		
 		// 保存输出到临时文件
 		if _, err := tmpFile.Write(output); err != nil {
 			printColored(colorRed, "写入临时文件失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 		
 		// 创建标记文件
 		if err := createMarkerFile(); err != nil {
 			printColored(colorRed, "创建标记文件失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 		
 		printColored(colorGreen, "预览完成。标记文件已创建: "+markerFile)
@@ -256,7 +390,7 @@ func main() {
 		
 		if err := cmd.Run(); err != nil {
 			printColored(colorRed, "打开编辑器失败: "+err.Error())
-			os.Exit(1)
+			osExit(1)
 		}
 	} else {
 		// 检查标记文件
@@ -264,7 +398,7 @@ func main() {
 		if !valid {
 			printColored(colorRed, "错误: "+err.Error())
 			printColored(colorRed, "请先使用 --dry-run 参数重新生成标记文件。")
-			os.Exit(1)
+			osExit(1)
 		}
 		
 		printColored(colorGreen, "执行实际文件夹镜像...")
@@ -278,7 +412,7 @@ func main() {
 		if err != nil {
 			printColored(colorRed, "执行rsync失败: "+err.Error())
 			fmt.Println(string(output))
-			os.Exit(1)
+			osExit(1)
 		}
 		
 		printColored(colorGreen, "文件夹镜像成功完成!")
