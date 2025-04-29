@@ -37,7 +37,7 @@ func mockSuccess() {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	os.Exit(0)
+	osExit(0)
 }
 
 // 模拟失败的命令
@@ -45,7 +45,7 @@ func mockFailure() {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-	os.Exit(1)
+	osExit(1)
 }
 
 // 测试辅助进程
@@ -66,7 +66,7 @@ func TestHelperProcess(t *testing.T) {
 	
 	if len(args) == 0 {
 		// 没有找到命令
-		os.Exit(1)
+		osExit(1)
 	}
 	
 	// 根据命令类型返回不同的退出码
@@ -74,18 +74,18 @@ func TestHelperProcess(t *testing.T) {
 	switch cmd {
 	case "rsync":
 		// rsync成功
-		os.Exit(0)
+		osExit(0)
 	case "echo":
 		// echo成功
-		os.Exit(0)
+		osExit(0)
 	case "vim":
 		// vim成功
-		os.Exit(0)
+		osExit(0)
 	case "fail-rsync":
 		// rsync失败
-		os.Exit(1)
+		osExit(1)
 	default:
 		// 未知命令
-		os.Exit(127)
+		osExit(127)
 	}
 } 
