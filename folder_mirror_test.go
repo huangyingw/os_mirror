@@ -265,6 +265,171 @@ func TestReadRuleFile(t *testing.T) {
 	}
 }
 
+// 测试检查目录是否为空
+func TestIsDirEmpty(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := ioutil.TempDir("", "empty_dir_test")
+	if err != nil {
+		t.Fatalf("无法创建临时目录: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 测试空目录
+	empty, err := isDirEmpty(tempDir)
+	if err != nil {
+		t.Errorf("isDirEmpty(%s) 失败: %v", tempDir, err)
+	}
+	if !empty {
+		t.Errorf("isDirEmpty(%s) = false, 期望 true (空目录应返回true)", tempDir)
+	}
+
+	// 测试非空目录
+	filePath := filepath.Join(tempDir, "test_file")
+	if err := ioutil.WriteFile(filePath, []byte("test"), 0644); err != nil {
+		t.Fatalf("无法创建测试文件: %v", err)
+	}
+
+	empty, err = isDirEmpty(tempDir)
+	if err != nil {
+		t.Errorf("isDirEmpty(%s) 失败: %v", tempDir, err)
+	}
+	if empty {
+		t.Errorf("isDirEmpty(%s) = true, 期望 false (非空目录应返回false)", tempDir)
+	}
+
+	// 测试不存在的目录
+	nonExistentDir := filepath.Join(tempDir, "non_existent")
+	_, err = isDirEmpty(nonExistentDir)
+	if err == nil {
+		t.Errorf("isDirEmpty(%s) 应返回错误，但没有", nonExistentDir)
+	}
+
+	// 测试远程路径
+	remotePath := "user@host:/path/to/dir"
+	empty, err = isDirEmpty(remotePath)
+	if err != nil {
+		t.Errorf("isDirEmpty(%s) 失败: %v", remotePath, err)
+	}
+	if empty {
+		t.Errorf("isDirEmpty(%s) = true, 期望 false (远程路径应默认为非空)", remotePath)
+	}
+}
+
+// 测试检查目录是否相同或嵌套
+func TestCheckDirSameOrNested(t *testing.T) {
+	// 创建临时目录
+	baseDir, err := ioutil.TempDir("", "dir_relation_test")
+	if err != nil {
+		t.Fatalf("无法创建临时目录: %v", err)
+	}
+	defer os.RemoveAll(baseDir)
+
+	// 创建测试目录结构
+	sourceDir := filepath.Join(baseDir, "source")
+	targetDir := filepath.Join(baseDir, "target")
+	nestedDir := filepath.Join(sourceDir, "nested")
+	
+	for _, dir := range []string{sourceDir, targetDir, nestedDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("无法创建目录 %s: %v", dir, err)
+		}
+	}
+
+	// 测试相同目录
+	same, err := checkDirSameOrNested(sourceDir, sourceDir)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, sourceDir, err)
+	}
+	if !same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (相同目录应返回true)", sourceDir, sourceDir)
+	}
+
+	// 测试不同目录
+	same, err = checkDirSameOrNested(sourceDir, targetDir)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, targetDir, err)
+	}
+	if same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (不同目录应返回false)", sourceDir, targetDir)
+	}
+
+	// 测试嵌套目录 - 目标是源的子目录
+	same, err = checkDirSameOrNested(sourceDir, nestedDir)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, nestedDir, err)
+	}
+	if !same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (目标是源的子目录应返回true)", sourceDir, nestedDir)
+	}
+
+	// 测试嵌套目录 - 源是目标的子目录
+	same, err = checkDirSameOrNested(nestedDir, sourceDir)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", nestedDir, sourceDir, err)
+	}
+	if !same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (源是目标的子目录应返回true)", nestedDir, sourceDir)
+	}
+
+	// 测试符号链接 (只在非Windows系统上运行)
+	if os.PathSeparator == '/' {
+		// 创建指向源目录的符号链接
+		linkPath := filepath.Join(baseDir, "link_to_source")
+		if err := os.Symlink(sourceDir, linkPath); err != nil {
+			t.Fatalf("无法创建符号链接: %v", err)
+		}
+
+		// 测试源目录和链接
+		same, err = checkDirSameOrNested(sourceDir, linkPath)
+		if err != nil {
+			t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, linkPath, err)
+		}
+		if !same {
+			t.Errorf("checkDirSameOrNested(%s, %s) = false, 期望 true (源和指向源的链接应返回true)", sourceDir, linkPath)
+		}
+
+		// 测试链接和目标目录
+		same, err = checkDirSameOrNested(linkPath, targetDir)
+		if err != nil {
+			t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", linkPath, targetDir, err)
+		}
+		if same {
+			t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (链接和不同目录应返回false)", linkPath, targetDir)
+		}
+	}
+
+	// 测试远程路径
+	remotePath := "user@host:/path/to/dir"
+	
+	// 本地路径和远程路径
+	same, err = checkDirSameOrNested(sourceDir, remotePath)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", sourceDir, remotePath, err)
+	}
+	if same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (本地和远程路径应返回false)", sourceDir, remotePath)
+	}
+	
+	// 远程路径和本地路径
+	same, err = checkDirSameOrNested(remotePath, sourceDir)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", remotePath, sourceDir, err)
+	}
+	if same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (远程和本地路径应返回false)", remotePath, sourceDir)
+	}
+	
+	// 两个远程路径
+	remotePath2 := "user@host:/path/to/other"
+	same, err = checkDirSameOrNested(remotePath, remotePath2)
+	if err != nil {
+		t.Errorf("checkDirSameOrNested(%s, %s) 失败: %v", remotePath, remotePath2, err)
+	}
+	if same {
+		t.Errorf("checkDirSameOrNested(%s, %s) = true, 期望 false (两个不同远程路径应返回false)", remotePath, remotePath2)
+	}
+}
+
 // 测试彩色打印函数 - 由于输出到控制台，只能做基本验证
 func TestPrintColored(t *testing.T) {
 	// 这个测试基本上是检查函数是否会抛出panic
