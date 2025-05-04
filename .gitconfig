@@ -1,0 +1,6 @@
+[remote "origin"]
+	url = git@github.com:huangyingw/os_mirror.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[remote "BareReps"]
+	url = ../../BareReps/loadrc/os_mirror
+	fetch = +refs/heads/*:refs/remotes/BareReps/*
