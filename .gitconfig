@@ -4,3 +4,5 @@
 [remote "BareReps"]
 	url = ../../BareReps/loadrc/os_mirror
 	fetch = +refs/heads/*:refs/remotes/BareReps/*
+[push]
+    remote = origin
