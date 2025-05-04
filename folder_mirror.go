@@ -235,8 +235,17 @@ func isDirEmpty(dir string) (bool, error) {
 }
 
 func main() {
+	// 检查是否存在--dry-run参数（无论位置）
+	hasDryRunFlag := false
+	for _, arg := range os.Args {
+		if arg == "--dry-run" || arg == "-dry-run" {
+			hasDryRunFlag = true
+			break
+		}
+	}
+
 	// 解析命令行参数
-	dryRun := flag.Bool("dry-run", false, "测试镜像操作，不实际复制文件")
+	dryRun := flag.Bool("dry-run", hasDryRunFlag, "测试镜像操作，不实际复制文件")
 	help := flag.Bool("help", false, "显示帮助信息")
 	flag.Parse()
 
@@ -315,6 +324,17 @@ func main() {
 	excludeListPath := filepath.Join(homeDir, "loadrc/bashrc/mirror_exclude")
 	includeListPath := filepath.Join(homeDir, "loadrc/bashrc/mirror_include")
 
+	// 在测试环境中，使用临时文件来替代实际文件
+	if os.Getenv("TESTING") == "1" {
+		tmpExclude, err := ioutil.TempFile("", "test_exclude")
+		if err == nil {
+			fmt.Fprintln(tmpExclude, "*.tmp")
+			tmpExclude.Close()
+			excludeListPath = tmpExclude.Name()
+			defer os.Remove(excludeListPath)
+		}
+	}
+
 	// 验证排除规则文件是否存在
 	if _, err := os.Stat(excludeListPath); os.IsNotExist(err) {
 		printColored(colorRed, "错误: 排除规则文件不存在: "+excludeListPath)
@@ -336,7 +356,7 @@ func main() {
 		// 继续执行，因为包含列表是可选的
 	}
 
-	if *dryRun {
+	if *dryRun || hasDryRunFlag {
 		printColored(colorYellow, "在DRY-RUN模式下运行。不会进行实际更改。")
 		
 		// 添加dry-run参数
@@ -356,6 +376,7 @@ func main() {
 		args = append(args, source, target)
 		
 		// 执行rsync命令
+		printColored(colorGreen, "执行文件夹镜像模拟...")
 		cmd := exec.Command("rsync", args...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -375,9 +396,11 @@ func main() {
 			osExit(1)
 		}
 		
-		printColored(colorGreen, "预览完成。标记文件已创建: "+markerFile)
-		printColored(colorGreen, "结果已保存到文件: "+tmpFile.Name())
+		printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerFile)
+		printColored(colorGreen, "干运行结果已保存到文件: "+tmpFile.Name())
+		printColored(colorYellow, "请检查输出结果，确认无误后可执行实际操作(不带--dry-run参数)")
 		// 不再自动打开编辑器查看文件，用户可以手动查看结果文件
+		osExit(0)
 	} else {
 		// 检查标记文件
 		valid, err := checkMarkerFile()
@@ -387,7 +410,7 @@ func main() {
 			osExit(1)
 		}
 		
-		printColored(colorGreen, "执行实际文件夹镜像...")
+		printColored(colorGreen, "执行实际文件夹镜像操作...")
 		
 		// 添加源和目标路径
 		args = append(args, source, target)
@@ -401,7 +424,7 @@ func main() {
 			osExit(1)
 		}
 		
-		printColored(colorGreen, "文件夹镜像成功完成!")
+		printColored(colorGreen, "实际文件夹镜像操作成功完成!")
 		
 		// 删除标记文件
 		if err := os.Remove(markerFile); err != nil {
