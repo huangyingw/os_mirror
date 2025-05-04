@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// execCommand 是标准库exec.Command函数的可测试包装器
-var execCommand = exec.Command
-
 // 用于测试的模拟命令
 func fakeExecCommand(command string, args ...string) *exec.Cmd {
 	cs := []string{"-test.run=TestHelperProcess", "--", command}

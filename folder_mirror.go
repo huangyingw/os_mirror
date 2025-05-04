@@ -22,6 +22,9 @@ var (
 // osExit 封装了os.Exit函数，便于测试
 var osExit = os.Exit
 
+// 可注入的exec.Command，便于测试
+var execCommand = exec.Command
+
 // 定义颜色常量
 const (
 	colorRed    = "\033[0;31m"
@@ -234,37 +237,92 @@ func isDirEmpty(dir string) (bool, error) {
 	return false, err
 }
 
-func main() {
-	// 检查是否存在--dry-run参数（无论位置）
-	hasDryRunFlag := false
-	for _, arg := range os.Args {
-		if arg == "--dry-run" || arg == "-dry-run" {
-			hasDryRunFlag = true
-			break
-		}
-	}
-
-	// 解析命令行参数
-	dryRun := flag.Bool("dry-run", hasDryRunFlag, "测试镜像操作，不实际复制文件")
-	help := flag.Bool("help", false, "显示帮助信息")
-	flag.Parse()
-
-	if *help || flag.NArg() < 2 {
-		fmt.Printf("用法: %s [--dry-run] SOURCE_DIR TARGET_DIR\n\n", os.Args[0])
-		fmt.Println("选项:")
-		fmt.Println("  --dry-run          测试镜像操作，不实际复制文件")
-		fmt.Println("  --help             显示帮助信息")
-		fmt.Println()
-		fmt.Println("参数:")
-		fmt.Println("  SOURCE_DIR         源目录路径")
-		fmt.Println("  TARGET_DIR         目标目录路径")
+// 处理只读运行(dry-run)模式
+func handleDryRun(args []string, source, target string) {
+	printColored(colorYellow, "在DRY-RUN模式下运行。不会进行实际更改。")
+	
+	// 添加dry-run参数
+	args = append(args, "-n", "-v")
+	
+	// 创建临时文件保存结果
+	logFilePath := "/tmp/folder_mirror.log"
+	logFile, err := os.Create(logFilePath)
+	if err != nil {
+		printColored(colorRed, "创建日志文件失败: "+err.Error())
 		osExit(1)
 	}
+	defer logFile.Close()
+	
+	printColored(colorGreen, "结果将保存到: "+logFilePath)
+	
+	// 添加源和目标路径
+	args = append(args, source, target)
+	
+	// 执行rsync命令
+	printColored(colorGreen, "执行文件夹镜像模拟...")
+	cmd := execCommand("rsync", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		printColored(colorRed, "执行rsync失败: "+err.Error())
+		osExit(1)
+	}
+	
+	// 保存输出到日志文件
+	if _, err := logFile.Write(output); err != nil {
+		printColored(colorRed, "写入日志文件失败: "+err.Error())
+		osExit(1)
+	}
+	
+	// 创建标记文件
+	if err := createMarkerFile(); err != nil {
+		printColored(colorRed, "创建标记文件失败: "+err.Error())
+		osExit(1)
+	}
+	
+	printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerFile)
+	printColored(colorGreen, "干运行结果已保存到文件: "+logFilePath)
+	printColored(colorYellow, "请检查输出结果，确认无误后可执行实际操作(不带--dry-run参数)")
+	// 不再自动打开编辑器查看文件，用户可以手动查看结果文件
+	osExit(0)
+}
 
-	// 获取源目录和目标目录
-	source := flag.Arg(0)
-	target := flag.Arg(1)
+// 处理实际执行模式
+func handleActualRun(args []string, source, target string) {
+	// 检查标记文件
+	valid, err := checkMarkerFile()
+	if !valid {
+		printColored(colorRed, "错误: "+err.Error())
+		printColored(colorRed, "请先使用 --dry-run 参数重新生成标记文件。")
+		osExit(1)
+	}
+	
+	printColored(colorGreen, "执行实际文件夹镜像操作...")
+	
+	// 添加源和目标路径
+	args = append(args, source, target)
+	
+	// 执行rsync命令
+	cmd := execCommand("rsync", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		printColored(colorRed, "执行rsync失败: "+err.Error())
+		fmt.Println(string(output))
+		osExit(1)
+	}
+	
+	printColored(colorGreen, "实际文件夹镜像操作成功完成!")
+	
+	// 删除标记文件
+	if err := os.Remove(markerFile); err != nil {
+		printColored(colorYellow, "警告: 无法删除标记文件: "+err.Error())
+	}
+	
+	// 确保调用osExit
+	osExit(0)
+}
 
+// 验证路径并准备目录
+func validateAndPreparePaths(source, target string) (string, string) {
 	// 确保路径末尾有斜杠
 	if !strings.HasSuffix(source, "/") {
 		source += "/"
@@ -312,7 +370,12 @@ func main() {
 			osExit(1)
 		}
 	}
+	
+	return source, target
+}
 
+// 准备rsync命令的参数
+func prepareRsyncArgs() []string {
 	// 获取用户主目录
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -355,80 +418,51 @@ func main() {
 		printColored(colorYellow, "警告: 包含规则文件不存在: "+includeListPath)
 		// 继续执行，因为包含列表是可选的
 	}
+	
+	return args
+}
 
+func main() {
+	// 检查是否存在--dry-run参数（无论位置）
+	hasDryRunFlag := false
+	for _, arg := range os.Args {
+		if arg == "--dry-run" || arg == "-dry-run" {
+			hasDryRunFlag = true
+			break
+		}
+	}
+
+	// 解析命令行参数
+	dryRun := flag.Bool("dry-run", hasDryRunFlag, "测试镜像操作，不实际复制文件")
+	help := flag.Bool("help", false, "显示帮助信息")
+	flag.Parse()
+
+	if *help || flag.NArg() < 2 {
+		fmt.Printf("用法: %s [--dry-run] SOURCE_DIR TARGET_DIR\n\n", os.Args[0])
+		fmt.Println("选项:")
+		fmt.Println("  --dry-run          测试镜像操作，不实际复制文件")
+		fmt.Println("  --help             显示帮助信息")
+		fmt.Println()
+		fmt.Println("参数:")
+		fmt.Println("  SOURCE_DIR         源目录路径")
+		fmt.Println("  TARGET_DIR         目标目录路径")
+		osExit(1)
+	}
+
+	// 获取源目录和目标目录
+	source := flag.Arg(0)
+	target := flag.Arg(1)
+	
+	// 验证路径并准备目录
+	source, target = validateAndPreparePaths(source, target)
+	
+	// 准备rsync命令的参数
+	args := prepareRsyncArgs()
+	
+	// 根据运行模式执行不同的处理
 	if *dryRun || hasDryRunFlag {
-		printColored(colorYellow, "在DRY-RUN模式下运行。不会进行实际更改。")
-		
-		// 添加dry-run参数
-		args = append(args, "-n", "-v")
-		
-		// 创建临时文件保存结果
-		tmpFile, err := ioutil.TempFile("", "folder_mirror_*.log")
-		if err != nil {
-			printColored(colorRed, "创建临时文件失败: "+err.Error())
-			osExit(1)
-		}
-		defer tmpFile.Close()
-		
-		printColored(colorGreen, "结果将保存到: "+tmpFile.Name())
-		
-		// 添加源和目标路径
-		args = append(args, source, target)
-		
-		// 执行rsync命令
-		printColored(colorGreen, "执行文件夹镜像模拟...")
-		cmd := exec.Command("rsync", args...)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			printColored(colorRed, "执行rsync失败: "+err.Error())
-			osExit(1)
-		}
-		
-		// 保存输出到临时文件
-		if _, err := tmpFile.Write(output); err != nil {
-			printColored(colorRed, "写入临时文件失败: "+err.Error())
-			osExit(1)
-		}
-		
-		// 创建标记文件
-		if err := createMarkerFile(); err != nil {
-			printColored(colorRed, "创建标记文件失败: "+err.Error())
-			osExit(1)
-		}
-		
-		printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerFile)
-		printColored(colorGreen, "干运行结果已保存到文件: "+tmpFile.Name())
-		printColored(colorYellow, "请检查输出结果，确认无误后可执行实际操作(不带--dry-run参数)")
-		// 不再自动打开编辑器查看文件，用户可以手动查看结果文件
-		osExit(0)
+		handleDryRun(args, source, target)
 	} else {
-		// 检查标记文件
-		valid, err := checkMarkerFile()
-		if !valid {
-			printColored(colorRed, "错误: "+err.Error())
-			printColored(colorRed, "请先使用 --dry-run 参数重新生成标记文件。")
-			osExit(1)
-		}
-		
-		printColored(colorGreen, "执行实际文件夹镜像操作...")
-		
-		// 添加源和目标路径
-		args = append(args, source, target)
-		
-		// 执行rsync命令
-		cmd := exec.Command("rsync", args...)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			printColored(colorRed, "执行rsync失败: "+err.Error())
-			fmt.Println(string(output))
-			osExit(1)
-		}
-		
-		printColored(colorGreen, "实际文件夹镜像操作成功完成!")
-		
-		// 删除标记文件
-		if err := os.Remove(markerFile); err != nil {
-			printColored(colorYellow, "警告: 无法删除标记文件: "+err.Error())
-		}
+		handleActualRun(args, source, target)
 	}
 } 
