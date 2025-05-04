@@ -54,6 +54,12 @@ func TestHelperProcess(t *testing.T) {
 		return
 	}
 	
+	// 检查是否设置了强制失败标志
+	if os.Getenv("GO_HELPER_PROCESS_FAIL") == "1" {
+		// 如果设置了强制失败标志，模拟命令失败
+		osExit(1)
+	}
+	
 	// 获取命令名称（通常是第三个参数，因为第一个是可执行文件，第二个是--）
 	args := os.Args
 	for len(args) > 0 {
@@ -142,11 +148,16 @@ func TestHelperProcessFunction(t *testing.T) {
 	defer func() { osExit = oldOsExit }()
 	
 	// 保存和设置环境变量
-	oldEnv := os.Getenv("GO_WANT_HELPER_PROCESS")
-	defer os.Setenv("GO_WANT_HELPER_PROCESS", oldEnv)
+	oldWantEnv := os.Getenv("GO_WANT_HELPER_PROCESS")
+	oldFailEnv := os.Getenv("GO_HELPER_PROCESS_FAIL")
+	defer func() {
+		os.Setenv("GO_WANT_HELPER_PROCESS", oldWantEnv)
+		os.Setenv("GO_HELPER_PROCESS_FAIL", oldFailEnv)
+	}()
 	
 	// 测试当GO_WANT_HELPER_PROCESS不为1时的行为
 	os.Setenv("GO_WANT_HELPER_PROCESS", "0")
+	os.Setenv("GO_HELPER_PROCESS_FAIL", "0")
 	TestHelperProcess(t)
 	// 这种情况下函数应该提前返回，不会改变退出码
 	if exitCode != 0 {
@@ -155,6 +166,7 @@ func TestHelperProcessFunction(t *testing.T) {
 	
 	// 测试GO_WANT_HELPER_PROCESS为1时，但没有命令参数的情况
 	os.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	os.Setenv("GO_HELPER_PROCESS_FAIL", "0")
 	oldArgs := os.Args
 	os.Args = []string{"test"} // 没有-- 后面的命令参数
 	defer func() { os.Args = oldArgs }()
@@ -187,4 +199,16 @@ func TestHelperProcessFunction(t *testing.T) {
 	if exitCode != 127 {
 		t.Errorf("对于未知命令，TestHelperProcess应当返回退出码127，但得到: %d", exitCode)
 	}
+	
+	// 测试GO_HELPER_PROCESS_FAIL为1的情况
+	os.Setenv("GO_HELPER_PROCESS_FAIL", "1")
+	os.Args = []string{"test", "--", "rsync"}
+	exitCode = 0
+	TestHelperProcess(t)
+	if exitCode != 1 {
+		t.Errorf("当GO_HELPER_PROCESS_FAIL为1时，即使是rsync命令，TestHelperProcess也应当返回退出码1，但得到: %d", exitCode)
+	}
+	
+	// 恢复环境变量
+	os.Setenv("GO_HELPER_PROCESS_FAIL", "0")
 } 
