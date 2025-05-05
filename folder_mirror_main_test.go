@@ -815,13 +815,20 @@ func TestMainActualExecutionWithMockedHelpers(t *testing.T) {
 				
 				// 执行rsync命令
 				cmd := execCommand("rsync", args...)
-				output, err := cmd.CombinedOutput()
+				var err error
+				if tc.shouldFail {
+					// 对于预期失败的测试，仍然可以使用CombinedOutput
+					_, err = cmd.CombinedOutput()
+				} else {
+					// 对于预期成功的测试，使用Run方法
+					cmd.Stdout = ioutil.Discard
+					cmd.Stderr = ioutil.Discard
+					err = cmd.Run()
+				}
+				
 				if err != nil {
 					// 如果命令执行失败
 					printColored(colorRed, "执行rsync失败: "+err.Error())
-					if len(output) > 0 {
-						fmt.Println(string(output))
-					}
 					osExit(1)
 				} else {
 					// 执行成功

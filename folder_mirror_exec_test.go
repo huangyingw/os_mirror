@@ -69,9 +69,14 @@ func TestDryRunExecution(t *testing.T) {
 	
 	// 执行命令
 	cmd := execCommand("rsync", args...)
-	output, err := cmd.CombinedOutput()
+	
+	// 测试环境中重定向输出到/dev/null
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
+	
+	err = cmd.Run()
 	if err != nil {
-		t.Errorf("模拟rsync命令执行失败: %v, 输出: %s", err, string(output))
+		t.Errorf("模拟rsync命令执行失败: %v", err)
 	}
 	
 	// 创建标记文件
@@ -147,9 +152,14 @@ func TestActualExecution(t *testing.T) {
 	
 	// 执行命令
 	cmd := execCommand("rsync", args...)
-	output, err := cmd.CombinedOutput()
+	
+	// 测试环境中重定向输出到/dev/null
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
+	
+	err = cmd.Run()
 	if err != nil {
-		t.Errorf("模拟rsync命令执行失败: %v, 输出: %s", err, string(output))
+		t.Errorf("模拟rsync命令执行失败: %v", err)
 	}
 	
 	// 删除标记文件
@@ -229,7 +239,12 @@ func TestExecutionFailure(t *testing.T) {
 	
 	// 执行命令
 	cmd := execCommand("rsync", args...)
-	_, err = cmd.CombinedOutput()
+	
+	// 测试环境中重定向输出到/dev/null
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
+	
+	err = cmd.Run()
 	if err == nil {
 		t.Errorf("模拟rsync命令预期失败，但却成功了")
 	}

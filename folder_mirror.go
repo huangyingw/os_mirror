@@ -258,18 +258,39 @@ func handleDryRun(args []string, source, target string) {
 	// 添加源和目标路径
 	args = append(args, source, target)
 	
-	// 执行rsync命令
+	// 执行rsync命令，并允许实时显示进度
 	printColored(colorGreen, "执行文件夹镜像模拟...")
 	cmd := execCommand("rsync", args...)
-	output, err := cmd.CombinedOutput()
+	
+	// 创建一个管道，同时输出到终端和日志文件
+	cmd.Stderr = os.Stderr
+	
+	// 创建多写器，同时写入到stdout和logFile
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		printColored(colorRed, "无法创建输出管道: "+err.Error())
+		osExit(1)
+	}
+	
+	// 启动命令
+	if err := cmd.Start(); err != nil {
 		printColored(colorRed, "执行rsync失败: "+err.Error())
 		osExit(1)
 	}
 	
-	// 保存输出到日志文件
-	if _, err := logFile.Write(output); err != nil {
-		printColored(colorRed, "写入日志文件失败: "+err.Error())
+	// 读取输出并同时写入到终端和日志文件
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Println(line)
+			fmt.Fprintln(logFile, line)
+		}
+	}()
+	
+	// 等待命令完成
+	if err := cmd.Wait(); err != nil {
+		printColored(colorRed, "执行rsync失败: "+err.Error())
 		osExit(1)
 	}
 	
@@ -301,12 +322,15 @@ func handleActualRun(args []string, source, target string) {
 	// 添加源和目标路径
 	args = append(args, source, target)
 	
-	// 执行rsync命令
+	// 执行rsync命令，并允许实时输出进度
 	cmd := execCommand("rsync", args...)
-	output, err := cmd.CombinedOutput()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	// 执行命令并等待完成
+	err = cmd.Run()
 	if err != nil {
 		printColored(colorRed, "执行rsync失败: "+err.Error())
-		fmt.Println(string(output))
 		osExit(1)
 	}
 	
@@ -405,7 +429,7 @@ func prepareRsyncArgs() []string {
 	}
 
 	// 构建rsync命令参数
-	args := []string{"-aH", "--force", "--delete-during"}
+	args := []string{"-aH", "--force", "--delete-during", "--progress"}
 
 	// 使用文件方式添加排除规则，简化代码
 	// rsync 原生支持 */build/* 等通配符格式
