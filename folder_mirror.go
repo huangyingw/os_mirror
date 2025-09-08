@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // 定义可配置参数（改为变量以便于测试）
@@ -36,6 +37,13 @@ const (
 // 用于测试的全局钩子变量
 var printHook func(string)
 var disablePrint bool = false
+
+// 全局变量用于命令行参数
+var (
+	dryRun bool
+	source string
+	target string
+)
 
 // 彩色打印
 func printColored(color, message string) {
@@ -446,47 +454,51 @@ func prepareRsyncArgs() []string {
 	return args
 }
 
-func main() {
-	// 检查是否存在--dry-run参数（无论位置）
-	hasDryRunFlag := false
-	for _, arg := range os.Args {
-		if arg == "--dry-run" || arg == "-dry-run" {
-			hasDryRunFlag = true
-			break
-		}
-	}
-
-	// 解析命令行参数
-	dryRun := flag.Bool("dry-run", hasDryRunFlag, "测试镜像操作，不实际复制文件")
-	help := flag.Bool("help", false, "显示帮助信息")
-	flag.Parse()
-
-	if *help || flag.NArg() < 2 {
-		fmt.Printf("用法: %s [--dry-run] SOURCE_DIR TARGET_DIR\n\n", os.Args[0])
-		fmt.Println("选项:")
-		fmt.Println("  --dry-run          测试镜像操作，不实际复制文件")
-		fmt.Println("  --help             显示帮助信息")
-		fmt.Println()
-		fmt.Println("参数:")
-		fmt.Println("  SOURCE_DIR         源目录路径")
-		fmt.Println("  TARGET_DIR         目标目录路径")
+// 执行镜像操作
+func runMirror(cmd *cobra.Command, args []string) {
+	// 验证参数数量
+	if len(args) < 2 {
+		printColored(colorRed, "错误: 需要提供源目录和目标目录")
+		cmd.Usage()
 		osExit(1)
 	}
 
-	// 获取源目录和目标目录
-	source := flag.Arg(0)
-	target := flag.Arg(1)
+	source = args[0]
+	target = args[1]
 	
 	// 验证路径并准备目录
 	source, target = validateAndPreparePaths(source, target)
 	
 	// 准备rsync命令的参数
-	args := prepareRsyncArgs()
+	rsyncArgs := prepareRsyncArgs()
 	
 	// 根据运行模式执行不同的处理
-	if *dryRun || hasDryRunFlag {
-		handleDryRun(args, source, target)
+	if dryRun {
+		handleDryRun(rsyncArgs, source, target)
 	} else {
-		handleActualRun(args, source, target)
+		handleActualRun(rsyncArgs, source, target)
 	}
-} 
+}
+
+// 主函数 - 使用cobra创建命令行应用
+func main() {
+	var rootCmd = &cobra.Command{
+		Use:   "folder_mirror [flags] SOURCE_DIR TARGET_DIR",
+		Short: "镜像文件夹内容到目标位置",
+		Long: `folder_mirror 是一个用于同步文件夹内容的工具。
+它使用 rsync 在源目录和目标目录之间进行镜像操作。
+
+该工具支持dry-run模式，允许你在实际执行前预览将要进行的操作。`,
+		Args: cobra.MinimumNArgs(2),
+		Run:  runMirror,
+	}
+
+	// 添加命令行标志
+	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "测试镜像操作，不实际复制文件")
+
+	// 执行命令
+	if err := rootCmd.Execute(); err != nil {
+		printColored(colorRed, "错误: "+err.Error())
+		osExit(1)
+	}
+}
