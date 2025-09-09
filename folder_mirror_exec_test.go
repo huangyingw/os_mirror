@@ -23,21 +23,8 @@ func TestDryRunExecution(t *testing.T) {
 	// 创建临时测试目录
 	testDir, sourceDir, targetDir := setupTestDirs(t)
 	defer os.RemoveAll(testDir)
-	
-	// 创建临时标记文件
-	originalMarkerFile := markerFile
-	tmpMarkerFile, err := ioutil.TempFile("", "marker_test_dry_run")
-	if err != nil {
-		t.Fatalf("无法创建临时标记文件: %v", err)
-	}
-	tmpMarkerFile.Close()
-	os.Remove(tmpMarkerFile.Name()) // 删除文件以便让程序自己创建
-	
-	markerFile = tmpMarkerFile.Name()
-	defer func() {
-		markerFile = originalMarkerFile
-		os.Remove(tmpMarkerFile.Name())
-	}()
+
+	var err error
 	
 	// 创建测试规则文件
 	excludeFile, includeFile := createTestRuleFiles(t, testDir)
@@ -49,7 +36,7 @@ func TestDryRunExecution(t *testing.T) {
 	
 	// 创建loadrc/bashrc目录结构
 	bashrcDir := filepath.Join(testDir, "loadrc/bashrc")
-	if err := os.MkdirAll(bashrcDir, 0755); err != nil {
+	if err = os.MkdirAll(bashrcDir, 0755); err != nil {
 		t.Fatalf("无法创建规则目录: %v", err)
 	}
 	
@@ -80,12 +67,13 @@ func TestDryRunExecution(t *testing.T) {
 	}
 	
 	// 创建标记文件
-	if err := createMarkerFile(); err != nil {
+	if err = createMarkerFile(sourceDir); err != nil {
 		t.Errorf("无法创建标记文件: %v", err)
 	}
 	
 	// 测试是否创建标记文件
-	if _, err := os.Stat(markerFile); os.IsNotExist(err) {
+	expectedMarkerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Errorf("执行dry-run后标记文件未被创建")
 	}
 }
@@ -105,20 +93,10 @@ func TestActualExecution(t *testing.T) {
 	testDir, sourceDir, targetDir := setupTestDirs(t)
 	defer os.RemoveAll(testDir)
 	
-	// 创建临时标记文件并写入有效时间戳
-	originalMarkerFile := markerFile
-	tmpMarkerFile, err := ioutil.TempFile("", "marker_test_actual")
-	if err != nil {
-		t.Fatalf("无法创建临时标记文件: %v", err)
-	}
-	markerFile = tmpMarkerFile.Name()
-	defer func() {
-		markerFile = originalMarkerFile
-		os.Remove(tmpMarkerFile.Name())
-	}()
+	var err error
 	
 	// 创建有效的标记文件
-	if err := createMarkerFile(); err != nil {
+	if err = createMarkerFile(sourceDir); err != nil {
 		t.Fatalf("无法创建标记文件: %v", err)
 	}
 	
@@ -132,7 +110,7 @@ func TestActualExecution(t *testing.T) {
 	
 	// 创建loadrc/bashrc目录结构
 	bashrcDir := filepath.Join(testDir, "loadrc/bashrc")
-	if err := os.MkdirAll(bashrcDir, 0755); err != nil {
+	if err = os.MkdirAll(bashrcDir, 0755); err != nil {
 		t.Fatalf("无法创建规则目录: %v", err)
 	}
 	
@@ -163,12 +141,13 @@ func TestActualExecution(t *testing.T) {
 	}
 	
 	// 删除标记文件
-	if err := os.Remove(markerFile); err != nil {
+	expectedMarkerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	if err := os.Remove(expectedMarkerPath); err != nil {
 		t.Fatalf("无法删除标记文件: %v", err)
 	}
 	
 	// 测试是否删除标记文件
-	if _, err := os.Stat(markerFile); !os.IsNotExist(err) {
+	if _, err := os.Stat(expectedMarkerPath); !os.IsNotExist(err) {
 		t.Errorf("执行实际操作后标记文件未被删除")
 	}
 }
@@ -179,20 +158,10 @@ func TestExecutionFailure(t *testing.T) {
 	testDir, sourceDir, targetDir := setupTestDirs(t)
 	defer os.RemoveAll(testDir)
 	
-	// 创建临时标记文件并写入有效时间戳
-	originalMarkerFile := markerFile
-	tmpMarkerFile, err := ioutil.TempFile("", "marker_test_failure")
-	if err != nil {
-		t.Fatalf("无法创建临时标记文件: %v", err)
-	}
-	markerFile = tmpMarkerFile.Name()
-	defer func() {
-		markerFile = originalMarkerFile
-		os.Remove(tmpMarkerFile.Name())
-	}()
+	var err error
 	
 	// 创建有效的标记文件
-	if err := createMarkerFile(); err != nil {
+	if err = createMarkerFile(sourceDir); err != nil {
 		t.Fatalf("无法创建标记文件: %v", err)
 	}
 	
@@ -206,7 +175,7 @@ func TestExecutionFailure(t *testing.T) {
 	
 	// 创建loadrc/bashrc目录结构
 	bashrcDir := filepath.Join(testDir, "loadrc/bashrc")
-	if err := os.MkdirAll(bashrcDir, 0755); err != nil {
+	if err = os.MkdirAll(bashrcDir, 0755); err != nil {
 		t.Fatalf("无法创建规则目录: %v", err)
 	}
 	

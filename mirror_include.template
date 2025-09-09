@@ -1,0 +1,28 @@
+# Folder Mirror Include Template
+# 包含规则文件模板 - 指定需要强制包含的文件和目录
+# 当文件同时匹配 exclude 和 include 规则时，include 优先
+# 每行一个规则，支持通配符
+# 以 # 开头的行为注释
+
+# 重要配置文件（即使在排除目录中也要包含）
+# .gitignore
+# .env.example
+# README.md
+# LICENSE
+
+# 特定的重要文件
+# */important.conf
+# */config/*.yml
+
+# 即使在 node_modules 中也要包含的文件
+# node_modules/my-local-package/
+
+# 在构建目录中需要保留的文件
+# build/README.md
+# dist/docs/
+
+# 特定的日志文件（如果需要）
+# app.log
+
+# 注意：通常 include 文件是可选的
+# 只有在需要覆盖 exclude 规则时才需要使用

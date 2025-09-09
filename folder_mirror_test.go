@@ -149,36 +149,21 @@ func TestCreateDir(t *testing.T) {
 
 // 测试标记文件创建和检查
 func TestMarkerFile(t *testing.T) {
-	// 保存原始常量值以便在测试后恢复
-	originalMarkerFile := markerFile
-	originalMarkerTimeout := markerTimeout
-	
-	// 创建临时文件作为测试标记文件
-	tmpMarkerFile, err := ioutil.TempFile("", "marker_test")
+	// 创建测试源目录
+	sourceDir, err := ioutil.TempDir("", "marker_test_source")
 	if err != nil {
-		t.Fatalf("无法创建临时标记文件: %v", err)
+		t.Fatalf("无法创建测试源目录: %v", err)
 	}
-	tmpMarkerPath := tmpMarkerFile.Name()
-	tmpMarkerFile.Close()
-	defer os.Remove(tmpMarkerPath)
-	
-	// 修改变量值以使用临时文件
-	markerFile = tmpMarkerPath
-	markerTimeout = 10 // 10秒超时用于测试
-	
-	// 测试完成后恢复原始值
-	defer func() {
-		markerFile = originalMarkerFile
-		markerTimeout = originalMarkerTimeout
-	}()
+	defer os.RemoveAll(sourceDir)
 	
 	// 测试创建标记文件
-	if err := createMarkerFile(); err != nil {
+	if err := createMarkerFile(sourceDir); err != nil {
 		t.Errorf("createMarkerFile() 失败: %v", err)
 	}
 	
 	// 验证标记文件内容
-	data, err := ioutil.ReadFile(markerFile)
+	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	data, err := ioutil.ReadFile(markerPath)
 	if err != nil {
 		t.Fatalf("无法读取标记文件: %v", err)
 	}
@@ -201,7 +186,7 @@ func TestMarkerFile(t *testing.T) {
 	}
 	
 	// 测试检查标记文件
-	valid, err := checkMarkerFile()
+	valid, err := checkMarkerFile(sourceDir)
 	if err != nil {
 		t.Errorf("checkMarkerFile() 失败: %v", err)
 	}
@@ -211,31 +196,31 @@ func TestMarkerFile(t *testing.T) {
 	
 	// 测试过期的标记文件
 	expiredTimestamp := time.Now().Unix() - markerTimeout - 10
-	if err := ioutil.WriteFile(markerFile, []byte(strconv.FormatInt(expiredTimestamp, 10)), 0644); err != nil {
+	if err := ioutil.WriteFile(markerPath, []byte(strconv.FormatInt(expiredTimestamp, 10)), 0644); err != nil {
 		t.Fatalf("无法写入标记文件: %v", err)
 	}
 	
-	valid, err = checkMarkerFile()
+	valid, err = checkMarkerFile(sourceDir)
 	if valid || err == nil {
 		t.Errorf("对于过期的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
 	}
 	
 	// 测试标记文件格式错误
-	if err := ioutil.WriteFile(markerFile, []byte("not_a_timestamp"), 0644); err != nil {
+	if err := ioutil.WriteFile(markerPath, []byte("not_a_timestamp"), 0644); err != nil {
 		t.Fatalf("无法写入标记文件: %v", err)
 	}
 	
-	valid, err = checkMarkerFile()
+	valid, err = checkMarkerFile(sourceDir)
 	if valid || err == nil {
 		t.Errorf("对于格式错误的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
 	}
 	
 	// 删除标记文件测试不存在的情况
-	if err := os.Remove(markerFile); err != nil {
+	if err := os.Remove(markerPath); err != nil {
 		t.Fatalf("无法删除标记文件: %v", err)
 	}
 	
-	valid, err = checkMarkerFile()
+	valid, err = checkMarkerFile(sourceDir)
 	if valid || err == nil {
 		t.Errorf("对于不存在的标记文件，checkMarkerFile() = %v, %v; 期望 false, error", valid, err)
 	}

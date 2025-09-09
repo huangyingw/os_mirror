@@ -1,2 +1,12 @@
 coverage.html
 coverage.out
+
+# 编译的二进制文件
+folder_mirror
+
+# 测试产生的临时文件
+*.test
+
+# 测试运行时产生的标记和日志文件
+.folder_mirror_marker
+.folder_mirror.log

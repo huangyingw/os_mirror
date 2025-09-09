@@ -16,8 +16,9 @@ import (
 
 // 定义可配置参数（改为变量以便于测试）
 var (
-	markerFile    = "/tmp/folder_mirror_marker"
-	markerTimeout = int64(3600) // 1小时（秒）
+	markerFile    = ".folder_mirror_marker" // 相对路径，将保存在源目录
+	logFile       = ".folder_mirror.log"     // 相对路径，将保存在源目录
+	markerTimeout = int64(3600)               // 1小时（秒）
 )
 
 // osExit 封装了os.Exit函数，便于测试
@@ -38,12 +39,8 @@ const (
 var printHook func(string)
 var disablePrint bool = false
 
-// 全局变量用于命令行参数
-var (
-	dryRun bool
-	source string
-	target string
-)
+// 命令行标志
+var dryRun bool
 
 // 彩色打印
 func printColored(color, message string) {
@@ -80,6 +77,20 @@ func readRuleFile(filePath string) ([]string, error) {
 	return rules, nil
 }
 
+// 检查文件是否存在
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// getSourceFilePath 获取源目录中的文件路径（辅助函数减少重复代码）
+func getSourceFilePath(source, filename string) string {
+	return filepath.Join(strings.TrimSuffix(source, "/"), filename)
+}
+
 // 检查目录是否存在
 func dirExists(path string) bool {
 	// 远程路径检查 (包含冒号的路径)
@@ -106,11 +117,13 @@ func createDir(path string) error {
 }
 
 // 检查标记文件
-func checkMarkerFile() (bool, error) {
-	data, err := ioutil.ReadFile(markerFile)
+func checkMarkerFile(source string) (bool, error) {
+	// 标记文件保存在源目录中
+	markerPath := getSourceFilePath(source, markerFile)
+	data, err := ioutil.ReadFile(markerPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, fmt.Errorf("找不到标记文件。请先使用 --dry-run 参数生成标记文件")
+			return false, fmt.Errorf("找不到标记文件 (%s)。请先使用 --dry-run 参数生成标记文件", markerPath)
 		}
 		return false, err
 	}
@@ -118,23 +131,25 @@ func checkMarkerFile() (bool, error) {
 	timestampStr := strings.TrimSpace(string(data))
 	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
 	if err != nil {
-		return false, fmt.Errorf("无法解析标记文件时间戳: %v", err)
+		return false, fmt.Errorf("无法解析标记文件 (%s) 中的时间戳: %v", markerPath, err)
 	}
 
 	currentTime := time.Now().Unix()
 	timeDiff := currentTime - timestamp
 
 	if timeDiff > markerTimeout {
-		return false, fmt.Errorf("标记文件太旧 (%d 秒, 最大 %d)", timeDiff, markerTimeout)
+		return false, fmt.Errorf("标记文件 (%s) 太旧 (%d 秒, 最大 %d)", markerPath, timeDiff, markerTimeout)
 	}
 
 	return true, nil
 }
 
 // 创建标记文件
-func createMarkerFile() error {
+func createMarkerFile(source string) error {
+	// 标记文件保存在源目录中
+	markerPath := getSourceFilePath(source, markerFile)
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	return ioutil.WriteFile(markerFile, []byte(timestamp), 0644)
+	return ioutil.WriteFile(markerPath, []byte(timestamp), 0644)
 }
 
 // 检查源目录和目标目录是否相同或有从属关系
@@ -252,14 +267,14 @@ func handleDryRun(args []string, source, target string) {
 	// 添加dry-run参数
 	args = append(args, "-n", "-v")
 	
-	// 创建临时文件保存结果
-	logFilePath := "/tmp/folder_mirror.log"
-	logFile, err := os.Create(logFilePath)
+	// 在源目录创建日志文件保存结果
+	logFilePath := filepath.Join(strings.TrimSuffix(source, "/"), logFile)
+	logFileHandle, err := os.Create(logFilePath)
 	if err != nil {
-		printColored(colorRed, "创建日志文件失败: "+err.Error())
+		printColored(colorRed, fmt.Sprintf("创建日志文件 (%s) 失败: %v", logFilePath, err))
 		osExit(1)
 	}
-	defer logFile.Close()
+	defer logFileHandle.Close()
 	
 	printColored(colorGreen, "结果将保存到: "+logFilePath)
 	
@@ -292,7 +307,7 @@ func handleDryRun(args []string, source, target string) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			fmt.Println(line)
-			fmt.Fprintln(logFile, line)
+			fmt.Fprintln(logFileHandle, line)
 		}
 	}()
 	
@@ -303,22 +318,22 @@ func handleDryRun(args []string, source, target string) {
 	}
 	
 	// 创建标记文件
-	if err := createMarkerFile(); err != nil {
+	if err := createMarkerFile(source); err != nil {
 		printColored(colorRed, "创建标记文件失败: "+err.Error())
 		osExit(1)
 	}
 	
-	printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerFile)
+	markerPath := getSourceFilePath(source, markerFile)
+	printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerPath)
 	printColored(colorGreen, "干运行结果已保存到文件: "+logFilePath)
 	printColored(colorYellow, "请检查输出结果，确认无误后可执行实际操作(不带--dry-run参数)")
-	// 不再自动打开编辑器查看文件，用户可以手动查看结果文件
 	osExit(0)
 }
 
 // 处理实际执行模式
 func handleActualRun(args []string, source, target string) {
 	// 检查标记文件
-	valid, err := checkMarkerFile()
+	valid, err := checkMarkerFile(source)
 	if !valid {
 		printColored(colorRed, "错误: "+err.Error())
 		printColored(colorRed, "请先使用 --dry-run 参数重新生成标记文件。")
@@ -345,11 +360,11 @@ func handleActualRun(args []string, source, target string) {
 	printColored(colorGreen, "实际文件夹镜像操作成功完成!")
 	
 	// 删除标记文件
-	if err := os.Remove(markerFile); err != nil {
-		printColored(colorYellow, "警告: 无法删除标记文件: "+err.Error())
+	markerPath := getSourceFilePath(source, markerFile)
+	if err := os.Remove(markerPath); err != nil {
+		printColored(colorYellow, fmt.Sprintf("警告: 无法删除标记文件 (%s): %v", markerPath, err))
 	}
 	
-	// 确保调用osExit
 	osExit(0)
 }
 
@@ -407,98 +422,135 @@ func validateAndPreparePaths(source, target string) (string, string) {
 }
 
 // 准备rsync命令的参数
-func prepareRsyncArgs() []string {
-	// 获取用户主目录
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		printColored(colorRed, "无法获取用户主目录: "+err.Error())
-		osExit(1)
-	}
-
-	// 读取排除和包含的文件列表
-	excludeListPath := filepath.Join(homeDir, "loadrc/bashrc/mirror_exclude")
-	includeListPath := filepath.Join(homeDir, "loadrc/bashrc/mirror_include")
-
-	// 在测试环境中，使用临时文件来替代实际文件
+func prepareRsyncArgs(source string) []string {
+	// 在测试环境中，使用临时文件
 	if os.Getenv("TESTING") == "1" {
 		tmpExclude, err := ioutil.TempFile("", "test_exclude")
 		if err == nil {
 			fmt.Fprintln(tmpExclude, "*.tmp")
 			tmpExclude.Close()
-			excludeListPath = tmpExclude.Name()
+			excludeListPath := tmpExclude.Name()
 			defer os.Remove(excludeListPath)
+			
+			args := []string{"-aH", "--force", "--delete-during", "--progress"}
+			args = append(args, "--exclude-from="+excludeListPath)
+			return args
 		}
 	}
 
-	// 验证排除规则文件是否存在
-	if _, err := os.Stat(excludeListPath); os.IsNotExist(err) {
-		printColored(colorRed, "错误: 排除规则文件不存在: "+excludeListPath)
-		osExit(1)
+	// 配置文件只在项目根目录查找
+	excludeListPath := "mirror_exclude"
+	includeListPath := "mirror_include"
+	
+	// 检查排除规则文件是否存在
+	if !fileExists(excludeListPath) {
+		printColored(colorYellow, "提示: 项目根目录未找到 mirror_exclude 文件")
+		printColored(colorYellow, "将使用默认排除规则")
+		printColored(colorYellow, "如需自定义，请在项目根目录创建: "+excludeListPath)
+		excludeListPath = ""
+	} else {
+		printColored(colorGreen, "使用排除规则文件: "+excludeListPath+" (项目根目录)")
+	}
+	
+	// 检查包含规则文件是否存在
+	if fileExists(includeListPath) {
+		printColored(colorGreen, "使用包含规则文件: "+includeListPath+" (项目根目录)")
+	} else {
+		includeListPath = ""
 	}
 
 	// 构建rsync命令参数
 	args := []string{"-aH", "--force", "--delete-during", "--progress"}
 
-	// 使用文件方式添加排除规则，简化代码
-	// rsync 原生支持 */build/* 等通配符格式
-	args = append(args, "--exclude-from="+excludeListPath)
-
-	// 如果包含规则文件存在，也使用文件方式添加
-	if _, err := os.Stat(includeListPath); !os.IsNotExist(err) {
-		args = append(args, "--include-from="+includeListPath)
+	// 添加排除规则
+	if excludeListPath != "" {
+		args = append(args, "--exclude-from="+excludeListPath)
 	} else {
-		printColored(colorYellow, "警告: 包含规则文件不存在: "+includeListPath)
-		// 继续执行，因为包含列表是可选的
+		// 如果没有找到排除文件，添加一些默认的排除规则
+		defaultExcludes := []string{
+			".git/", ".svn/", "*.tmp", "*.swp",
+			".folder_mirror_marker", ".folder_mirror.log",
+		}
+		for _, exclude := range defaultExcludes {
+			args = append(args, "--exclude="+exclude)
+		}
+	}
+
+	// 添加包含规则（如果存在）
+	if includeListPath != "" {
+		args = append(args, "--include-from="+includeListPath)
 	}
 	
 	return args
 }
 
-// 执行镜像操作
-func runMirror(cmd *cobra.Command, args []string) {
-	// 验证参数数量
-	if len(args) < 2 {
-		printColored(colorRed, "错误: 需要提供源目录和目标目录")
-		cmd.Usage()
-		osExit(1)
-	}
-
-	source = args[0]
-	target = args[1]
-	
-	// 验证路径并准备目录
-	source, target = validateAndPreparePaths(source, target)
-	
-	// 准备rsync命令的参数
-	rsyncArgs := prepareRsyncArgs()
-	
-	// 根据运行模式执行不同的处理
-	if dryRun {
-		handleDryRun(rsyncArgs, source, target)
-	} else {
-		handleActualRun(rsyncArgs, source, target)
-	}
-}
-
-// 主函数 - 使用cobra创建命令行应用
 func main() {
 	var rootCmd = &cobra.Command{
-		Use:   "folder_mirror [flags] SOURCE_DIR TARGET_DIR",
+		Use:   "folder_mirror SOURCE_DIR TARGET_DIR",
 		Short: "镜像文件夹内容到目标位置",
 		Long: `folder_mirror 是一个用于同步文件夹内容的工具。
 它使用 rsync 在源目录和目标目录之间进行镜像操作。
 
-该工具支持dry-run模式，允许你在实际执行前预览将要进行的操作。`,
-		Args: cobra.MinimumNArgs(2),
-		Run:  runMirror,
+该工具支持dry-run模式，允许你在实际执行前预览将要进行的操作。
+
+特性:
+  • 支持灵活的参数位置 - 标志可以放在任何位置
+  • 自动处理符号链接
+  • 防止源目录和目标目录相同或嵌套
+  • 彩色输出提高可读性`,
+		Example: `  # Dry run 模式（标志在前）
+  folder_mirror --dry-run /source/dir /target/dir
+  
+  # Dry run 模式（标志在中间）
+  folder_mirror /source/dir --dry-run /target/dir
+  
+  # Dry run 模式（标志在后）
+  folder_mirror /source/dir /target/dir --dry-run
+  
+  # 实际执行
+  folder_mirror /source/dir /target/dir`,
+		Args: cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			source := args[0]
+			target := args[1]
+			
+			// 验证路径并准备目录
+			source, target = validateAndPreparePaths(source, target)
+			
+			// 准备rsync命令的参数
+			rsyncArgs := prepareRsyncArgs(source)
+			
+			// 根据运行模式执行不同的处理
+			if dryRun {
+				handleDryRun(rsyncArgs, source, target)
+			} else {
+				handleActualRun(rsyncArgs, source, target)
+			}
+		},
 	}
 
-	// 添加命令行标志
+	// 添加标志
+	// Cobra 自动支持标志在任何位置！
 	rootCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "测试镜像操作，不实际复制文件")
+	
+	// 设置自定义帮助模板（可选）
+	rootCmd.SetHelpTemplate(`{{.Long}}
+
+用法:
+  {{.UseLine}}
+
+示例:
+{{.Example}}
+
+选项:
+{{.Flags.FlagUsages | trimTrailingWhitespaces}}
+
+使用 "{{.CommandPath}} --help" 获取更多信息。
+`)
 
 	// 执行命令
 	if err := rootCmd.Execute(); err != nil {
-		printColored(colorRed, "错误: "+err.Error())
+		// Cobra 已经打印了错误，直接退出
 		osExit(1)
 	}
 }

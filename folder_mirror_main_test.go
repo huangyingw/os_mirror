@@ -3,6 +3,7 @@ package main
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"fmt"
@@ -42,57 +43,8 @@ func TestMain(m *testing.M) {
 	os.Exit(result)
 }
 
-// 测试帮助命令行参数
-func TestMainHelpFlag(t *testing.T) {
-	// 保存原始 osExit 和参数
-	oldOsExit := osExit
-	oldArgs := os.Args
-	defer func() { 
-		osExit = oldOsExit 
-		os.Args = oldArgs
-	}()
-	
-	// 设置测试环境
-	os.Setenv("TESTING", "1")
-	
-	// 设置参数
-	os.Args = []string{"folder_mirror", "--help"}
-	
-	// 重置flag包状态
-	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	
-	// 记录osExit调用
-	exitCalled := false
-	osExit = func(code int) {
-		exitCalled = true
-		// 测试中不实际退出
-	}
-	
-	// 模拟main函数中处理帮助标志的部分
-	hasDryRunFlag := false
-	for _, arg := range os.Args {
-		if arg == "--dry-run" || arg == "-dry-run" {
-			hasDryRunFlag = true
-			break
-		}
-	}
-	
-	// 解析命令行参数
-	_ = flag.Bool("dry-run", hasDryRunFlag, "测试镜像操作，不实际复制文件")
-	help := flag.Bool("help", false, "显示帮助信息")
-	flag.Parse()
-	
-	// 处理帮助标志
-	if *help || flag.NArg() < 2 {
-		// 帮助信息处理逻辑，实际运行时会调用osExit
-		osExit(1)
-	}
-	
-	// 验证结果
-	if !exitCalled {
-		t.Error("帮助标志测试未调用 os.Exit")
-	}
-}
+// 测试帮助命令行参数 - Cobra 版本不需要此测试
+// Cobra 自动处理帮助标志，这个测试已被移除
 
 // 测试参数不足的情况
 func TestMainInsufficientArgs(t *testing.T) {
@@ -167,16 +119,11 @@ func TestMainDryRun(t *testing.T) {
 	// 保存原始设置
 	oldOsExit := osExit
 	oldArgs := os.Args
-	origMarkerFile := markerFile
-	
-	// 设置临时标记文件
-	markerFile = tempDir + "/marker"
 	
 	// 测试完成后恢复原始设置
 	defer func() {
 		osExit = oldOsExit
 		os.Args = oldArgs
-		markerFile = origMarkerFile
 	}()
 
 	// 设置测试环境
@@ -196,12 +143,13 @@ func TestMainDryRun(t *testing.T) {
 	
 	// 模拟干运行操作
 	// 为了测试创建标记文件，我们直接调用相关函数
-	if err := createMarkerFile(); err != nil {
+	if err := createMarkerFile(srcDir); err != nil {
 		t.Fatalf("创建标记文件失败: %v", err)
 	}
 	
 	// 验证标记文件创建
-	if _, err := os.Stat(markerFile); os.IsNotExist(err) {
+	expectedMarkerPath := filepath.Join(srcDir, ".folder_mirror_marker")
+	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Error("标记文件未创建")
 	}
 	
@@ -746,21 +694,13 @@ func TestMainActualExecutionWithMockedHelpers(t *testing.T) {
 			// 保存原始设置
 			oldOsExit := osExit
 			oldArgs := os.Args
-			oldMarkerFile := markerFile
 			origExecCommand := execCommand
 			origPrintHook := printHook
-			
-			// 设置临时标记文件
-			markerFile = tempDir + "/marker"
-			
-			// 创建有效的标记文件
-			ioutil.WriteFile(markerFile, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
 			
 			// 测试完成后恢复原始设置
 			defer func() {
 				osExit = oldOsExit
 				os.Args = oldArgs
-				markerFile = oldMarkerFile
 				execCommand = origExecCommand
 				printHook = origPrintHook
 			}()
@@ -803,8 +743,11 @@ func TestMainActualExecutionWithMockedHelpers(t *testing.T) {
 			// 在非dry-run模式下直接执行main的逻辑
 			// 这里我们只执行相关的部分，而不是完整的main函数
 			
+			// 先创建标记文件
+			createMarkerFile(srcDir)
+			
 			// 检查标记文件
-			valid, _ := checkMarkerFile()
+			valid, _ := checkMarkerFile(srcDir)
 			if valid {
 				// 执行实际操作
 				args := []string{"-aH", "--force", "--delete-during"}
@@ -835,7 +778,8 @@ func TestMainActualExecutionWithMockedHelpers(t *testing.T) {
 					printColored(colorGreen, "实际文件夹镜像操作成功完成!")
 					
 					// 删除标记文件
-					if err := os.Remove(markerFile); err != nil {
+					markerPath := filepath.Join(srcDir, ".folder_mirror_marker")
+					if err := os.Remove(markerPath); err != nil {
 						printColored(colorYellow, "警告: 无法删除标记文件: "+err.Error())
 					}
 					
@@ -901,29 +845,20 @@ func TestHandleDryRun(t *testing.T) {
 	// 保存原始设置
 	oldOsExit := osExit
 	oldExecCommand := execCommand
-	oldMarkerFile := markerFile
 	oldDisablePrint := disablePrint
 	
 	// 设置测试环境标志
 	oldTesting := os.Getenv("TESTING")
 	os.Setenv("TESTING", "1")
 	
-	// 设置临时标记文件
-	markerFile = tempDir + "/marker"
-	fmt.Println("设置标记文件:", markerFile)
-	
 	// 测试完成后恢复原始设置
 	defer func() {
 		osExit = oldOsExit
 		execCommand = oldExecCommand
-		markerFile = oldMarkerFile
 		disablePrint = oldDisablePrint
 		os.Setenv("TESTING", oldTesting)
 		
-		// 确保测试后删除日志文件
-		if _, err := os.Stat("/tmp/folder_mirror.log"); err == nil {
-			os.Remove("/tmp/folder_mirror.log")
-		}
+		// 清理函数，不需要删除日志文件因为临时目录会被删除
 		
 		fmt.Println("===== 结束测试 TestHandleDryRun =====")
 	}()
@@ -959,8 +894,9 @@ func TestHandleDryRun(t *testing.T) {
 	ioutil.WriteFile(source+"test.txt", []byte("test content"), 0644)
 	
 	// 确保日志文件不存在
-	if _, err := os.Stat("/tmp/folder_mirror.log"); err == nil {
-		os.Remove("/tmp/folder_mirror.log")
+	expectedLogPath := filepath.Join(strings.TrimSuffix(source, "/"), ".folder_mirror.log")
+	if _, err := os.Stat(expectedLogPath); err == nil {
+		os.Remove(expectedLogPath)
 	}
 	
 	// 调用被测试的函数
@@ -975,17 +911,19 @@ func TestHandleDryRun(t *testing.T) {
 	}
 	
 	// 检查标记文件是否被创建
-	if _, err := os.Stat(markerFile); os.IsNotExist(err) {
+	expectedMarkerPath := filepath.Join(strings.TrimSuffix(source, "/"), ".folder_mirror_marker")
+	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Error("标记文件未被创建")
 	} else {
-		fmt.Println("标记文件创建成功:", markerFile)
+		fmt.Println("标记文件创建成功:", expectedMarkerPath)
 	}
 	
 	// 检查日志文件是否被创建
-	if _, err := os.Stat("/tmp/folder_mirror.log"); os.IsNotExist(err) {
+	// expectedLogPath 已经在上面定义过了
+	if _, err := os.Stat(expectedLogPath); os.IsNotExist(err) {
 		t.Error("日志文件未被创建")
 	} else {
-		fmt.Println("日志文件创建成功: /tmp/folder_mirror.log")
+		fmt.Println("日志文件创建成功:", expectedLogPath)
 	}
 }
 
@@ -1173,7 +1111,7 @@ func TestPrepareRsyncArgs(t *testing.T) {
 	}
 	
 	// 调用被测试的函数
-	args := prepareRsyncArgs()
+	args := prepareRsyncArgs("/tmp/test_source")
 	
 	// 验证结果
 	if exitCalled {
@@ -1311,194 +1249,4 @@ func copyFile(src, dst string) error {
 	return ioutil.WriteFile(dst, data, 0644)
 }
 
-// 测试main函数中的命令行解析
-func TestMainCommandLineArgs(t *testing.T) {
-	// 定义测试用例
-	testCases := []struct {
-		name          string
-		args          []string
-		expectedCode  int
-		setupFunc     func()
-		validateFunc  func()
-		expectOsExit  bool
-		expectPanic   bool
-	}{
-		{
-			name:         "帮助标志",
-			args:         []string{"folder_mirror", "--help"},
-			expectedCode: 1,
-			setupFunc:    func() {},
-			validateFunc: func() {},
-			expectOsExit: true,
-			expectPanic:  true,
-		},
-		{
-			name:         "参数不足",
-			args:         []string{"folder_mirror"},
-			expectedCode: 1,
-			setupFunc:    func() {},
-			validateFunc: func() {},
-			expectOsExit: true,
-			expectPanic:  true,
-		},
-		{
-			name:         "干运行模式",
-			args:         []string{"folder_mirror", "--dry-run", "/tmp/src", "/tmp/dst"},
-			expectedCode: 0,
-			setupFunc: func() {
-				// 确保源目录存在
-				if err := os.MkdirAll("/tmp/src", 0755); err != nil {
-					t.Fatalf("无法创建源目录: %v", err)
-				}
-				// 确保源目录不为空
-				if err := ioutil.WriteFile("/tmp/src/test.txt", []byte("test"), 0644); err != nil {
-					t.Fatalf("无法创建测试文件: %v", err)
-				}
-			},
-			validateFunc: func() {
-				// 干运行模式应该会退出
-			},
-			expectOsExit: true,
-			expectPanic:  false, // handleDryRun中的osExit(0)不会导致panic
-		},
-		{
-			name:         "正常运行模式",
-			args:         []string{"folder_mirror", "/tmp/src", "/tmp/dst"},
-			expectedCode: 0,
-			setupFunc: func() {
-				// 确保源目录存在
-				if err := os.MkdirAll("/tmp/src", 0755); err != nil {
-					t.Fatalf("无法创建源目录: %v", err)
-				}
-				// 确保源目录不为空
-				if err := ioutil.WriteFile("/tmp/src/test.txt", []byte("test"), 0644); err != nil {
-					t.Fatalf("无法创建测试文件: %v", err)
-				}
-				// 创建标记文件
-				if err := ioutil.WriteFile(markerFile, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644); err != nil {
-					t.Fatalf("无法创建标记文件: %v", err)
-				}
-			},
-			validateFunc: func() {
-				// 清理标记文件
-				os.Remove(markerFile)
-			},
-			expectOsExit: true,
-			expectPanic:  false, // handleActualRun中的osExit(0)不会导致panic
-		},
-	}
-	
-	// 遍历测试用例
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// 设置测试环境
-			tc.setupFunc()
-			
-			// 保存原始设置
-			oldArgs := os.Args
-			oldOsExit := osExit
-			oldExecCommand := execCommand
-			oldDisablePrint := disablePrint
-			
-			// 设置测试环境
-			os.Args = tc.args
-			disablePrint = false // 显示打印以便调试
-			
-			// 创建输出捕获
-			rescueStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-			
-			// 模拟execCommand
-			execCommand = func(command string, args ...string) *exec.Cmd {
-				fmt.Println("模拟执行命令:", command, args)
-				return exec.Command("echo", "success")
-			}
-			
-			// 模拟osExit
-			exitCalled := false
-			exitCode := -1
-			osExit = func(code int) {
-				exitCalled = true
-				exitCode = code
-				fmt.Printf("检测到osExit调用，退出代码: %d\n", code)
-				
-				if tc.expectPanic && tc.expectedCode == code {
-					panic("预期的退出") // 用panic来终止执行
-				}
-			}
-			
-			// 设置测试环境标志
-			oldTesting := os.Getenv("TESTING")
-			os.Setenv("TESTING", "1")
-			
-			// 错误恢复和清理
-			defer func() {
-				// 恢复原始设置
-				os.Args = oldArgs
-				osExit = oldOsExit
-				execCommand = oldExecCommand
-				disablePrint = oldDisablePrint
-				os.Setenv("TESTING", oldTesting)
-				
-				// 恢复标准输出
-				w.Close()
-				os.Stdout = rescueStdout
-				
-				// 读取捕获的输出
-				var buf bytes.Buffer
-				if _, err := io.Copy(&buf, r); err != nil {
-					t.Errorf("无法读取捕获的输出: %v", err)
-				}
-				output := buf.String()
-				
-				// 处理输出
-				if len(output) > 0 {
-					t.Logf("测试输出: %s", output)
-				}
-				
-				// 如果期望panic，检查是否发生
-				if tc.expectPanic {
-					if r := recover(); r != nil {
-						if r != "预期的退出" {
-							// 如果不是我们自己的panic，重新抛出
-							panic(r)
-						}
-						// 正确的panic，更新退出码
-						exitCode = tc.expectedCode
-					} else if tc.expectOsExit {
-						t.Error("期望osExit被调用并导致panic，但未发生")
-					}
-				} else {
-					// 不期望panic，但可能仍然期望osExit
-					if r := recover(); r != nil {
-						t.Errorf("不期望panic，但发生了: %v", r)
-					}
-					
-					// 验证结果
-					if tc.expectOsExit && !exitCalled {
-						t.Error("期望osExit被调用，但未发生")
-					}
-					
-					if exitCalled && exitCode != tc.expectedCode {
-						t.Errorf("期望退出码 %d，但得到 %d", tc.expectedCode, exitCode)
-					}
-				}
-				
-				// 执行验证
-				tc.validateFunc()
-			}()
-			
-			// 重置flag，避免与其他测试冲突
-			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-			
-			// 执行main函数
-			main()
-			
-			// 如果期望osExit但没有被调用，这是个错误
-			if tc.expectOsExit && !exitCalled {
-				t.Error("期望osExit被调用，但未发生")
-			}
-		})
-	}
-} 
+ 

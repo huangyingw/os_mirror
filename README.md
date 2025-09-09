@@ -1,48 +1,18 @@
-# folder_mirror - 文件夹镜像工具
+# Folder Mirror Tool
 
-`folder_mirror` 是一个用 Go 编写的工具，用于有选择地将一个文件夹镜像到另一个文件夹。它使用 `rsync` 作为底层复制工具，支持包含和排除规则，以及预览模式。
+一个基于rsync的文件夹镜像工具，使用Go语言和Cobra框架实现。该工具可以安全地将源目录同步到目标目录，支持dry-run模式确保操作安全。
 
-## 功能特点
+## 功能特性
 
-- 基于 rsync 进行高效的文件复制
-- 支持预览模式 (dry-run)，可以查看哪些文件将被复制，预览结果会保存到文件
-- 使用标记文件确保预览后再执行实际操作
-- 支持通过配置文件定义包含和排除规则
-- 支持本地和远程路径
-- 彩色输出，提供更好的用户体验
-- 防止相同或嵌套目录之间的操作，避免潜在的文件损失
-- 防止空源目录的镜像，避免清空目标目录
-- 防止对远程路径执行危险操作
+- **安全的文件夹镜像**：使用rsync进行高效的文件同步
+- **Dry-run模式**：在实际执行前预览将要进行的操作
+- **标记文件保护机制**：防止误操作导致数据丢失
+- **自定义规则支持**：通过配置文件控制包含/排除规则
+- **详细的操作日志**：记录所有操作到日志文件
+- **目录安全检查**：防止相同或互为子目录的操作
+- **空目录保护**：防止空源目录导致目标目录被清空
 
-## 构建和安装
-
-### 使用 Makefile 构建
-
-推荐使用提供的 Makefile 进行构建和安装：
-
-```bash
-# 构建应用程序
-make build
-
-# 运行测试
-make test
-
-# 生成测试覆盖率报告
-make coverage
-
-# 安装到系统目录
-sudo make install
-
-# 清理构建文件
-make clean
-
-# 查看所有可用命令
-make help
-```
-
-### 手动构建
-
-如果不使用 Makefile，也可以手动构建：
+## 安装
 
 ```bash
 go build -o folder_mirror folder_mirror.go
@@ -50,90 +20,135 @@ go build -o folder_mirror folder_mirror.go
 
 ## 使用方法
 
-```
-folder_mirror [--dry-run] SOURCE_DIR TARGET_DIR
+### 基本用法
 
-选项:
-  --dry-run          测试镜像操作，不实际复制文件
-  --help             显示帮助信息
+```bash
+# Dry-run模式（推荐先执行）
+./folder_mirror --dry-run /path/to/source/ /path/to/target/
 
-参数:
-  SOURCE_DIR         源目录路径
-  TARGET_DIR         目标目录路径
+# 实际执行（需要先运行dry-run）
+./folder_mirror /path/to/source/ /path/to/target/
 ```
 
-## 安全特性
+### 命令行参数
 
-该工具包含多项安全检查，以防止意外的数据丢失：
+- `--dry-run, -n`: 只模拟运行，不进行实际文件操作
+- `--help, -h`: 显示帮助信息
 
-1. 防止在相同或嵌套目录之间执行镜像操作
-2. 防止从空源目录镜像（这可能会清空目标目录）
-3. 对远程路径执行额外的安全检查
+## 文件位置策略
 
-## 工作流程
+### 配置文件位置
 
-1. 使用 `--dry-run` 预览将要进行的操作，结果会保存到临时文件
-2. 查看生成的预览结果文件，确认无误
-3. 运行命令（不带 `--dry-run` 参数）执行实际操作
+配置文件必须放在**项目根目录**（即folder_mirror可执行文件所在的目录）：
 
-## 配置文件
+- `mirror_exclude`: 排除规则文件
+- `mirror_include`: 包含规则文件
 
-该工具使用两个配置文件来定义包含和排除规则：
+**注意**：配置文件只能放在项目根目录，其他位置的配置文件不会生效。
 
-- `$HOME/loadrc/bashrc/mirror_exclude` - 包含要排除的文件和目录模式
-- `$HOME/loadrc/bashrc/mirror_include` - 包含要明确包含的文件和目录模式
+### 运行时文件位置
 
-### 排除文件格式
+运行时产生的文件保存在**源目录**中：
+
+- `.folder_mirror_marker`: 标记文件（包含时间戳）
+- `.folder_mirror.log`: 操作日志文件
+
+### 文件结构示例
 
 ```
-# 这是注释
-/path/to/exclude/
+项目根目录/
+├── folder_mirror           # 可执行文件
+├── mirror_exclude          # 排除规则配置（可选）
+├── mirror_include          # 包含规则配置（可选）
+└── mirror_exclude.template # 排除规则模板（参考）
+
+源目录/
+├── .folder_mirror_marker   # 运行时生成的标记文件
+├── .folder_mirror.log      # 运行时生成的日志文件
+└── ... （其他源文件）
+```
+
+## 配置文件说明
+
+### mirror_exclude（排除规则）
+
+指定要排除的文件和目录模式，每行一个规则：
+
+```
+# 示例 mirror_exclude
+.git/
+.svn/
 *.tmp
+*.swp
+.DS_Store
+node_modules/
+__pycache__/
 ```
 
-### 包含文件格式
+### mirror_include（包含规则）
+
+指定要包含的文件模式（通常与排除规则配合使用）：
 
 ```
-# 这是注释
-/path/to/include/
-*.important
+# 示例 mirror_include
+*.go
+*.md
 ```
 
-## 示例
+### 默认排除规则
 
-预览模式：
+如果没有提供`mirror_exclude`文件，工具会使用以下默认排除规则：
+
+- `.git/`
+- `.svn/`
+- `*.tmp`
+- `*.swp`
+- `.folder_mirror_marker`
+- `.folder_mirror.log`
+
+## 安全机制
+
+### 标记文件保护
+
+1. **Dry-run生成标记**：dry-run模式成功后会在源目录生成`.folder_mirror_marker`文件
+2. **实际执行验证**：实际执行前检查标记文件是否存在且有效（5分钟内）
+3. **自动清理**：实际执行成功后自动删除标记文件
+
+### 目录安全检查
+
+- 源目录和目标目录不能相同
+- 源目录和目标目录不能互为子目录
+- 源目录不能为空
+- 不支持远程路径操作
+
+## 测试
+
+运行单元测试：
 
 ```bash
-folder_mirror --dry-run /home/user/source/ /backup/target/
+go test -v
 ```
 
-执行实际复制：
+运行测试覆盖率：
 
 ```bash
-folder_mirror /home/user/source/ /backup/target/
+go test -coverprofile=coverage.out
+go tool cover -html=coverage.out -o coverage.html
 ```
 
-## 开发和测试
+## 注意事项
 
-### 运行测试
-
-```bash
-# 运行所有测试
-make test
-
-# 生成测试覆盖率报告
-make coverage
-```
-
-测试覆盖率报告将生成在 `coverage.html` 文件中，可以在浏览器中查看详细的覆盖情况。
-
-### 代码结构
-
-- `folder_mirror.go` - 主程序代码
-- `folder_mirror_test.go` - 测试文件
-- `folder_mirror_test_utils.go` - 测试辅助函数
+1. **先执行dry-run**：强烈建议在实际执行前先运行dry-run模式查看将要进行的操作
+2. **检查日志文件**：dry-run后查看`.folder_mirror.log`文件确认操作内容
+3. **备份重要数据**：在对重要数据进行镜像操作前，请确保有备份
+4. **配置文件位置**：确保配置文件放在正确的位置（项目根目录）
 
 ## 依赖项
 
 - Go 1.16 或更高版本
-- 系统中已安装 rsync 
+- 系统中已安装 rsync
+- Cobra CLI 框架
+
+## 许可证
+
+MIT License 
