@@ -462,16 +462,23 @@ func prepareRsyncArgs(source string) []string {
 	// 构建rsync命令参数
 	args := []string{"-aH", "--force", "--delete-during", "--progress"}
 
-	// 添加排除规则
+	// 始终添加默认排除规则（这些是工具自身的运行时文件，必须排除）
+	defaultExcludes := []string{
+		".folder_mirror_marker", ".folder_mirror.log",
+	}
+	for _, exclude := range defaultExcludes {
+		args = append(args, "--exclude="+exclude)
+	}
+
+	// 添加用户自定义排除规则
 	if excludeListPath != "" {
 		args = append(args, "--exclude-from="+excludeListPath)
 	} else {
-		// 如果没有找到排除文件，添加一些默认的排除规则
-		defaultExcludes := []string{
+		// 如果没有找到排除文件，添加一些常见的排除规则
+		commonExcludes := []string{
 			".git/", ".svn/", "*.tmp", "*.swp",
-			".folder_mirror_marker", ".folder_mirror.log",
 		}
-		for _, exclude := range defaultExcludes {
+		for _, exclude := range commonExcludes {
 			args = append(args, "--exclude="+exclude)
 		}
 	}
