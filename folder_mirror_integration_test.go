@@ -93,13 +93,13 @@ func TestIntegrationDryRunFlow(t *testing.T) {
 	}
 	
 	// 验证标记文件被创建
-	markerPath := filepath.Join(strings.TrimSuffix(src, "/"), ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
 		t.Error("标记文件应被创建")
 	}
 	
 	// 验证日志文件被创建
-	logPath := filepath.Join(strings.TrimSuffix(src, "/"), ".folder_mirror.log")
+	logPath := ".folder_mirror.log"
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
 		t.Error("日志文件应被创建")
 	}
@@ -167,7 +167,7 @@ func TestIntegrationActualRunFlow(t *testing.T) {
 	}
 	
 	// 验证标记文件被删除
-	markerPath := filepath.Join(strings.TrimSuffix(src, "/"), ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
 		t.Error("标记文件应被删除")
 	}
@@ -193,7 +193,7 @@ func TestMarkerFileTimeout(t *testing.T) {
 	defer os.RemoveAll(testDir)
 	
 	// 创建过期的标记文件（2小时前）
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	oldTimestamp := time.Now().Unix() - 7200
 	timestampStr := strings.TrimSpace(strconv.FormatInt(oldTimestamp, 10))
 	if err := ioutil.WriteFile(markerPath, []byte(timestampStr), 0644); err != nil {

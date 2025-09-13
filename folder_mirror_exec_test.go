@@ -72,7 +72,7 @@ func TestDryRunExecution(t *testing.T) {
 	}
 	
 	// 测试是否创建标记文件
-	expectedMarkerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	expectedMarkerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Errorf("执行dry-run后标记文件未被创建")
 	}
@@ -141,7 +141,7 @@ func TestActualExecution(t *testing.T) {
 	}
 	
 	// 删除标记文件
-	expectedMarkerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	expectedMarkerPath := ".folder_mirror_marker"
 	if err := os.Remove(expectedMarkerPath); err != nil {
 		t.Fatalf("无法删除标记文件: %v", err)
 	}

@@ -48,7 +48,7 @@ go build -o folder_mirror folder_mirror.go
 
 ### 运行时文件位置
 
-运行时产生的文件保存在**源目录**中：
+运行时产生的文件保存在**项目根目录**中：
 
 - `.folder_mirror_marker`: 标记文件（包含时间戳）
 - `.folder_mirror.log`: 操作日志文件
@@ -60,12 +60,12 @@ go build -o folder_mirror folder_mirror.go
 ├── folder_mirror           # 可执行文件
 ├── mirror_exclude          # 排除规则配置（可选）
 ├── mirror_include          # 包含规则配置（可选）
-└── mirror_exclude.template # 排除规则模板（参考）
+├── mirror_exclude.template # 排除规则模板（参考）
+├── .folder_mirror_marker   # 运行时生成的标记文件
+└── .folder_mirror.log      # 运行时生成的日志文件
 
 源目录/
-├── .folder_mirror_marker   # 运行时生成的标记文件
-├── .folder_mirror.log      # 运行时生成的日志文件
-└── ... （其他源文件）
+└── ... （源文件）
 ```
 
 ## 配置文件说明
@@ -110,7 +110,7 @@ __pycache__/
 
 ### 标记文件保护
 
-1. **Dry-run生成标记**：dry-run模式成功后会在源目录生成`.folder_mirror_marker`文件
+1. **Dry-run生成标记**：dry-run模式成功后会在项目根目录生成`.folder_mirror_marker`文件
 2. **实际执行验证**：实际执行前检查标记文件是否存在且有效（5分钟内）
 3. **自动清理**：实际执行成功后自动删除标记文件
 

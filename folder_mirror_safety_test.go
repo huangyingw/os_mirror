@@ -25,7 +25,7 @@ func TestSafetyMechanisms(t *testing.T) {
 	t.Run("空源目录被拒绝", testEmptySourceRefusal)
 	t.Run("标记文件执行后自动删除", testMarkerFileAutoDelete)
 	t.Run("DryRun不删除文件", testDryRunNoDelete)
-	t.Run("标记文件仅在源目录有效", testMarkerFileLocation)
+	t.Run("标记文件在项目根目录", testMarkerFileLocation)
 }
 
 // 测试没有标记文件时拒绝执行
@@ -46,7 +46,7 @@ func testNoMarkerFileRefusal(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(sourceDir, "test.txt"), []byte("test"), 0644)
 
 	// 确保没有标记文件
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	os.Remove(markerPath)
 
 	// 检查标记文件应该返回错误
@@ -76,7 +76,7 @@ func testInvalidMarkerFileRefusal(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(sourceDir, "test.txt"), []byte("test"), 0644)
 
 	// 创建无效的标记文件
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	ioutil.WriteFile(markerPath, []byte("invalid_content"), 0644)
 
 	// 检查应该拒绝
@@ -106,7 +106,7 @@ func testExpiredMarkerFileRefusal(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(sourceDir, "test.txt"), []byte("test"), 0644)
 
 	// 创建过期的标记文件（2小时前）
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	expiredTime := time.Now().Unix() - 7200
 	ioutil.WriteFile(markerPath, []byte(fmt.Sprintf("%d", expiredTime)), 0644)
 
@@ -180,7 +180,7 @@ func testMarkerFileAutoDelete(t *testing.T) {
 	}
 
 	// 验证标记文件存在
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
 		t.Fatal("标记文件应该存在")
 	}
@@ -253,7 +253,7 @@ func testDryRunNoDelete(t *testing.T) {
 	}
 
 	// 验证标记文件被创建
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
 		t.Error("DryRun应该创建标记文件")
 	}
@@ -269,39 +269,38 @@ func testMarkerFileLocation(t *testing.T) {
 	defer os.RemoveAll(testDir)
 
 	sourceDir := filepath.Join(testDir, "source")
-	wrongDir := filepath.Join(testDir, "wrong")
 	os.MkdirAll(sourceDir, 0755)
-	os.MkdirAll(wrongDir, 0755)
 	
 	// 在源目录添加文件
 	ioutil.WriteFile(filepath.Join(sourceDir, "test.txt"), []byte("test"), 0644)
 
-	// 在错误的位置创建标记文件
-	wrongMarkerPath := filepath.Join(wrongDir, ".folder_mirror_marker")
-	ioutil.WriteFile(wrongMarkerPath, []byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
+	// 清理可能存在的标记文件
+	markerPath := ".folder_mirror_marker"
+	defer os.Remove(markerPath)
 
-	// 检查源目录的标记文件（应该找不到）
-	valid, err := checkMarkerFile(sourceDir)
-	if valid {
-		t.Error("标记文件在错误位置不应该有效")
-	}
-	if err == nil {
-		t.Error("应该返回找不到标记文件的错误")
-	}
-
-	// 在正确位置创建标记文件
+	// 创建标记文件（应该在项目根目录）
 	err = createMarkerFile(sourceDir)
 	if err != nil {
 		t.Fatalf("创建标记文件失败: %v", err)
 	}
 
-	// 再次检查（应该有效）
-	valid, err = checkMarkerFile(sourceDir)
+	// 验证标记文件在项目根目录而不是源目录
+	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
+		t.Error("标记文件应该在项目根目录")
+	}
+	
+	sourceMarkerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	if _, err := os.Stat(sourceMarkerPath); !os.IsNotExist(err) {
+		t.Error("标记文件不应该在源目录")
+	}
+
+	// 检查标记文件（应该有效）
+	valid, err := checkMarkerFile(sourceDir)
 	if err != nil {
 		t.Errorf("有效的标记文件不应该返回错误: %v", err)
 	}
 	if !valid {
-		t.Error("标记文件在正确位置应该有效")
+		t.Error("标记文件应该有效")
 	}
 }
 
@@ -361,7 +360,7 @@ func TestCompleteWorkflow(t *testing.T) {
 		}()
 		
 		// 验证标记文件创建
-		markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+		markerPath := ".folder_mirror_marker"
 		if _, err := os.Stat(markerPath); os.IsNotExist(err) {
 			t.Error("DryRun应该创建标记文件")
 		}
@@ -388,7 +387,7 @@ func TestCompleteWorkflow(t *testing.T) {
 		}()
 		
 		// 验证标记文件被删除
-		markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+		markerPath := ".folder_mirror_marker"
 		if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
 			t.Error("实际运行后标记文件应该被删除")
 		}

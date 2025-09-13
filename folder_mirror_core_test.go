@@ -3,7 +3,6 @@ package main
 import (
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,12 +18,15 @@ func TestCreateMarkerFileScenarios(t *testing.T) {
 	}
 	defer os.RemoveAll(testSourceDir)
 	
+	// 清理可能存在的标记文件
+	markerPath := ".folder_mirror_marker"
+	defer os.Remove(markerPath)
+	
 	if err := createMarkerFile(testSourceDir); err != nil {
 		t.Errorf("无法创建标记文件(正常情况): %v", err)
 	}
 	
 	// 验证文件内容
-	markerPath := filepath.Join(testSourceDir, ".folder_mirror_marker")
 	content, err := ioutil.ReadFile(markerPath)
 	if err != nil {
 		t.Errorf("无法读取创建的标记文件: %v", err)
@@ -34,23 +36,9 @@ func TestCreateMarkerFileScenarios(t *testing.T) {
 		t.Errorf("标记文件内容不是有效的时间戳: %s", string(content))
 	}
 	
-	// 场景2: 在只读源目录中创建标记文件（应该失败）
-	if os.Getuid() != 0 { // 跳过root用户，root可以写入只读目录
-		readonlyDir, err := ioutil.TempDir("", "readonly_source_")
-		if err != nil {
-			t.Fatalf("无法创建只读测试目录: %v", err)
-		}
-		defer os.RemoveAll(readonlyDir)
-		
-		// 设置为只读
-		if err := os.Chmod(readonlyDir, 0500); err != nil {
-			t.Fatalf("无法将目录设为只读: %v", err)
-		}
-		
-		// 尝试在只读目录中创建标记文件
-		if err := createMarkerFile(readonlyDir); err == nil {
-			t.Error("在只读源目录中创建标记文件应当失败，但成功了")
-		}
+	// 场景2: 重复创建标记文件（应该成功，覆盖旧文件）
+	if err := createMarkerFile(testSourceDir); err != nil {
+		t.Errorf("重复创建标记文件失败: %v", err)
 	}
 }
 
@@ -71,6 +59,10 @@ func TestCheckMarkerFileScenarios(t *testing.T) {
 	}
 	defer os.RemoveAll(testSourceDir)
 	
+	// 清理可能存在的标记文件
+	markerPath := ".folder_mirror_marker"
+	defer os.Remove(markerPath)
+	
 	// 场景1: 标记文件不存在
 	valid, err := checkMarkerFile(testSourceDir)
 	if valid {
@@ -81,7 +73,6 @@ func TestCheckMarkerFileScenarios(t *testing.T) {
 	}
 	
 	// 场景2: 标记文件存在但内容无效
-	markerPath := filepath.Join(testSourceDir, ".folder_mirror_marker")
 	if err := ioutil.WriteFile(markerPath, []byte("not_a_timestamp"), 0644); err != nil {
 		t.Fatalf("无法写入无效标记文件: %v", err)
 	}

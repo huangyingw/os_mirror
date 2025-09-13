@@ -1,0 +1,63 @@
+# rsync 排除规则示例
+# ==================
+
+# 排除特定目录的不同写法：
+
+# 1. 排除任何位置的 boot/grub/ 目录及其内容
+boot/grub/
+
+# 2. 只排除根目录下的 boot/grub/
+/boot/grub/
+
+# 3. 排除 boot 目录下所有内容
+boot/*
+
+# 4. 排除整个 boot 目录
+boot/
+
+# 5. 使用通配符排除
+boot/grub*
+**/boot/grub/
+
+# 常见排除规则示例：
+# ==================
+
+# 版本控制目录
+.git/
+.svn/
+
+# 临时文件
+*.tmp
+*.swp
+*~
+.DS_Store
+
+# 编译产物
+*.o
+*.pyc
+__pycache__/
+
+# 日志文件
+*.log
+logs/
+
+# 备份文件
+*.bak
+*.backup
+
+# 特定文件类型
+*.iso
+*.img
+
+# 特定目录（相对路径）
+cache/
+tmp/
+temp/
+
+# 特定目录（绝对路径，从源根目录开始）
+/var/cache/
+/tmp/
+
+# 排除文件但保留目录结构
+boot/grub/*
+# 这会排除 boot/grub/ 下的所有文件，但保留目录本身

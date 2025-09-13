@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -204,8 +203,8 @@ func TestMarkerFileOperations(t *testing.T) {
 		t.Fatalf("创建标记文件失败: %v", err)
 	}
 
-	// 验证文件存在
-	markerPath := filepath.Join(testSourceDir, ".folder_mirror_marker")
+	// 验证文件存在（现在在项目根目录）
+	markerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
 		t.Error("标记文件应该存在")
 	}

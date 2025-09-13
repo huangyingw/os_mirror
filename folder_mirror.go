@@ -118,8 +118,8 @@ func createDir(path string) error {
 
 // 检查标记文件
 func checkMarkerFile(source string) (bool, error) {
-	// 标记文件保存在源目录中
-	markerPath := getSourceFilePath(source, markerFile)
+	// 标记文件保存在项目根目录
+	markerPath := markerFile
 	data, err := ioutil.ReadFile(markerPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -146,8 +146,8 @@ func checkMarkerFile(source string) (bool, error) {
 
 // 创建标记文件
 func createMarkerFile(source string) error {
-	// 标记文件保存在源目录中
-	markerPath := getSourceFilePath(source, markerFile)
+	// 标记文件保存在项目根目录
+	markerPath := markerFile
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	return ioutil.WriteFile(markerPath, []byte(timestamp), 0644)
 }
@@ -267,8 +267,8 @@ func handleDryRun(args []string, source, target string) {
 	// 添加dry-run参数
 	args = append(args, "-n", "-v")
 	
-	// 在源目录创建日志文件保存结果
-	logFilePath := filepath.Join(strings.TrimSuffix(source, "/"), logFile)
+	// 在项目根目录创建日志文件保存结果
+	logFilePath := logFile
 	logFileHandle, err := os.Create(logFilePath)
 	if err != nil {
 		printColored(colorRed, fmt.Sprintf("创建日志文件 (%s) 失败: %v", logFilePath, err))
@@ -323,8 +323,7 @@ func handleDryRun(args []string, source, target string) {
 		osExit(1)
 	}
 	
-	markerPath := getSourceFilePath(source, markerFile)
-	printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerPath)
+	printColored(colorGreen, "模拟操作完成。标记文件已创建: "+markerFile)
 	printColored(colorGreen, "干运行结果已保存到文件: "+logFilePath)
 	printColored(colorYellow, "请检查输出结果，确认无误后可执行实际操作(不带--dry-run参数)")
 	osExit(0)
@@ -360,9 +359,8 @@ func handleActualRun(args []string, source, target string) {
 	printColored(colorGreen, "实际文件夹镜像操作成功完成!")
 	
 	// 删除标记文件
-	markerPath := getSourceFilePath(source, markerFile)
-	if err := os.Remove(markerPath); err != nil {
-		printColored(colorYellow, fmt.Sprintf("警告: 无法删除标记文件 (%s): %v", markerPath, err))
+	if err := os.Remove(markerFile); err != nil {
+		printColored(colorYellow, fmt.Sprintf("警告: 无法删除标记文件 (%s): %v", markerFile, err))
 	}
 	
 	osExit(0)

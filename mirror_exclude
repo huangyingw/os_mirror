@@ -1,1 +1,17 @@
 boot/grub/
+*.findresult
+*.runresult
+*.tmp
+*.bak
+myproject
+state/nvim/view
+.git/
+*.diff
+loadrc
+etc/*.sh
+etc/fstab*
+etc/crypttab
+media/
+home/huangyingw/.cache/
+home/huangyingw/.config/
+home/huangyingw/.local/

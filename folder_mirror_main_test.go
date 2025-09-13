@@ -3,7 +3,6 @@ package main
 import (
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"fmt"
@@ -148,7 +147,7 @@ func TestMainDryRun(t *testing.T) {
 	}
 	
 	// 验证标记文件创建
-	expectedMarkerPath := filepath.Join(srcDir, ".folder_mirror_marker")
+	expectedMarkerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Error("标记文件未创建")
 	}
@@ -778,7 +777,7 @@ func TestMainActualExecutionWithMockedHelpers(t *testing.T) {
 					printColored(colorGreen, "实际文件夹镜像操作成功完成!")
 					
 					// 删除标记文件
-					markerPath := filepath.Join(srcDir, ".folder_mirror_marker")
+					markerPath := ".folder_mirror_marker"
 					if err := os.Remove(markerPath); err != nil {
 						printColored(colorYellow, "警告: 无法删除标记文件: "+err.Error())
 					}
@@ -894,7 +893,7 @@ func TestHandleDryRun(t *testing.T) {
 	ioutil.WriteFile(source+"test.txt", []byte("test content"), 0644)
 	
 	// 确保日志文件不存在
-	expectedLogPath := filepath.Join(strings.TrimSuffix(source, "/"), ".folder_mirror.log")
+	expectedLogPath := ".folder_mirror.log"
 	if _, err := os.Stat(expectedLogPath); err == nil {
 		os.Remove(expectedLogPath)
 	}
@@ -911,7 +910,7 @@ func TestHandleDryRun(t *testing.T) {
 	}
 	
 	// 检查标记文件是否被创建
-	expectedMarkerPath := filepath.Join(strings.TrimSuffix(source, "/"), ".folder_mirror_marker")
+	expectedMarkerPath := ".folder_mirror_marker"
 	if _, err := os.Stat(expectedMarkerPath); os.IsNotExist(err) {
 		t.Error("标记文件未被创建")
 	} else {

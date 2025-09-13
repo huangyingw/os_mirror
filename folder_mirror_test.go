@@ -162,7 +162,7 @@ func TestMarkerFile(t *testing.T) {
 	}
 	
 	// 验证标记文件内容
-	markerPath := filepath.Join(sourceDir, ".folder_mirror_marker")
+	markerPath := ".folder_mirror_marker"
 	data, err := ioutil.ReadFile(markerPath)
 	if err != nil {
 		t.Fatalf("无法读取标记文件: %v", err)
