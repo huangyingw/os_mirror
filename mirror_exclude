@@ -1,17 +1,94 @@
-boot/grub/
-*.findresult
-*.runresult
-*.tmp
-*.bak
-myproject
-state/nvim/view
-.git/
-*.diff
-loadrc
-etc/*.sh
-etc/fstab*
+# ========================================
+# 只排除真正影响启动的关键文件
+# ========================================
+
+# GRUB 配置（保护目标系统的引导配置）
+boot/grub/grub.cfg
+boot/grub/grubenv
+boot/efi/EFI/ubuntu/grub.cfg
+
+# 文件系统挂载（最关键！必须保护）
+etc/fstab
+etc/fstab.d/
 etc/crypttab
+
+# 网络配置（保护目标系统的网络设置）
+etc/hostname
+etc/hosts
+etc/network/interfaces
+etc/netplan/*.yaml
+etc/NetworkManager/system-connections/
+
+# 机器特定ID
+etc/machine-id
+var/lib/dbus/machine-id
+
+# SSH主机密钥（每台机器应该唯一）
+etc/ssh/ssh_host_*
+
+# ========================================
+# 用户个人文件和项目（根据需要保护）
+# ========================================
+
+# 你的个人项目和配置（无论在哪个路径下）
+**/loadrc/
+**/myproject/
+home/huangyingw/.ssh/
+
+# Git仓库（避免混乱）
+**/.git/
+
+# ========================================
+# 运行时和临时文件（不应该同步）
+# ========================================
+
+# 系统运行时
+proc/
+sys/
+run/
+dev/
+tmp/
+
+# 挂载点
 media/
-home/huangyingw/.cache/
-home/huangyingw/.config/
-home/huangyingw/.local/
+mnt/
+cdrom/
+
+# 缓存
+var/cache/
+var/tmp/
+home/*/.cache/
+
+# 日志（可选，看你是否需要）
+var/log/
+
+# 交换文件
+swapfile
+*.swap
+
+# 锁文件
+var/lock/
+var/run/
+
+# ========================================
+# 备份和临时文件
+# ========================================
+*.bak
+*.tmp
+*.swp
+*~
+*.old
+*.orig
+
+# ========================================
+# 大型缓存目录（可选）
+# ========================================
+home/*/.local/share/Trash/
+home/*/.mozilla/firefox/*/Cache/
+home/*/.config/google-chrome/*/Cache/
+
+# 包管理器缓存
+var/cache/apt/archives/
+
+# 系统恢复
+lost+found/
