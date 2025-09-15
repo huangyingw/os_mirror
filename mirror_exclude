@@ -8,7 +8,7 @@ boot/grub/grubenv
 boot/efi/EFI/ubuntu/grub.cfg
 
 # 文件系统挂载（最关键！必须保护）
-etc/fstab
+etc/fstab*
 etc/fstab.d/
 etc/crypttab
 
@@ -26,6 +26,12 @@ var/lib/dbus/machine-id
 # SSH主机密钥（每台机器应该唯一）
 etc/ssh/ssh_host_*
 
+# Docker 数据（容器、镜像、卷等）
+var/lib/docker/
+
+# KVM/QEMU 虚拟机数据
+var/lib/libvirt/
+
 # ========================================
 # 用户个人文件和项目（根据需要保护）
 # ========================================
@@ -34,6 +40,7 @@ etc/ssh/ssh_host_*
 **/loadrc/
 **/myproject/
 home/huangyingw/.ssh/
+home/huangyingw/.claude/
 
 # Git仓库（避免混乱）
 **/.git/
@@ -68,7 +75,6 @@ swapfile
 
 # 锁文件
 var/lock/
-var/run/
 
 # ========================================
 # 备份和临时文件
@@ -86,9 +92,6 @@ var/run/
 home/*/.local/share/Trash/
 home/*/.mozilla/firefox/*/Cache/
 home/*/.config/google-chrome/*/Cache/
-
-# 包管理器缓存
-var/cache/apt/archives/
 
 # 系统恢复
 lost+found/
